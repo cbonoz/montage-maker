@@ -18,7 +18,7 @@ Usage:
       --song sounds/sb_snowfall.mp3 --bpm 80 \
       --max-dur 30 --output montage.mp4
 """
-import argparse, subprocess, sys, tempfile, shutil, math, re
+import argparse, json, subprocess, sys, tempfile, shutil, math, re
 from pathlib import Path
 
 TARGET_DUR = 25.0
@@ -316,18 +316,44 @@ def build(args):
     # --- Step 1b: overlay dramatic subtitle on hook if --hook-text provided ---
     if args.hook_text and hook_path.exists():
         subtitled = work / "hook_subtitled.mp4"
-        text_escaped = args.hook_text.replace("'", "'\\\\\\''").replace('"', '\\"')
-        # Semi-transparent black bar at bottom third + white text with shadow
+        # Parse --hook-text: plain string (single subtitle full duration)
+        # or JSON array (timed entries from find_dialogue.py --output json)
+        dt_font = "fontfile=/System/Library/Fonts/HelveticaNeue.ttc:fontsize=32:fontcolor=white:"
+        dt_style = "box=1:boxcolor=black@0.5:boxborderw=12:x=(w-text_w)/2:y=h-text_h-40:"
+        dt_style += "shadowx=2:shadowy=2:shadowcolor=black@0.6"
+
+        try:
+            entries = json.loads(args.hook_text)
+            if isinstance(entries, list):
+                # Timed subtitles from find_dialogue.py JSON output
+                dt_parts = []
+                for ent in entries:
+                    text = ent["text"].replace("'", "'\\\\\\''").replace('"', '\\"')
+                    rel_start = max(0.0, ent.get("start", 0) - hs)
+                    rel_end = min(hook_actual, ent.get("end", hook_actual) - hs)
+                    if rel_end <= rel_start:
+                        continue
+                    dt_parts.append(
+                        f"drawtext=text='{text}':{dt_font}{dt_style}:enable='between(t,{rel_start:.1f},{rel_end:.1f})'"
+                    )
+                if not dt_parts:
+                    raise ValueError("No valid subtitle entries")
+                filter_str = ",".join(dt_parts)
+                print(f"   Subtitles: {len(entries)} timed entries from transcript")
+            else:
+                raise ValueError("Not a list")
+        except (json.JSONDecodeError, TypeError, ValueError, KeyError):
+            # Plain string — single subtitle for full hook duration
+            text_escaped = args.hook_text.replace("'", "'\\\\\\''").replace('"', '\\"')
+            filter_str = (
+                f"drawtext=text='{text_escaped}':{dt_font}{dt_style},"
+                f"fade=t=in:st=0:d=0.3,fade=t=out:st={hook_actual-0.5}:d=0.5"
+            )
+            print(f"   Subtitle: \"{args.hook_text}\"")
+
         subprocess.run([
             "ffmpeg", "-y", "-i", str(hook_path),
-            "-vf",
-            f"drawtext=text='{text_escaped}':"
-            f"fontfile=/System/Library/Fonts/HelveticaNeue.ttc:"
-            f"fontsize=32:fontcolor=white:"
-            f"box=1:boxcolor=black@0.5:boxborderw=12:"
-            f"x=(w-text_w)/2:y=h-text_h-40:"
-            f"shadowx=2:shadowy=2:shadowcolor=black@0.6,"
-            f"fade=t=in:st=0:d=0.3,fade=t=out:st={hook_actual-0.5}:d=0.5",
+            "-vf", filter_str,
             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
             "-c:a", "copy",
             "-pix_fmt", "yuv420p",
@@ -337,7 +363,6 @@ def build(args):
         dur = probe_dur(subtitled)
         if dur > 0:
             hook_path = subtitled
-            print(f"   Subtitle: \"{args.hook_text}\"")
         else:
             print(f"   ⚠️ Subtitle overlay failed, using raw hook")
 
