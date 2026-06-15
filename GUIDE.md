@@ -70,9 +70,10 @@ Example: At 80 BPM, a 4-beat measure = 3 seconds. Cut scenes to land at 0s, 3s, 
 | Time range | Video | Audio |
 |------------|-------|-------|
 | **0–0.5s** | Black lead-in | Silence |
-| **0.5s–hook_end** | Hook dialogue clip | Dialogue full volume + **music at 5%** (barely audible bed) |
-| **hook_end–hook_end+0.5s** | First scene cuts | Music ramps smoothly from 5% → 100% |
-| **hook_end+0.5s–last 3s** | Scene montage | Music full volume |
+| **0.5s–hook_end** | Hook dialogue clip | Dialogue full volume + **music at 2%** (barely audible bed) |
+| **hook_end-0.3s–hook_end** | Final dialogue words | Music swells from 2% → **~17%** (still low, dialogue dominant) |
+| **hook_end–hook_end+1.7s** | First scene cuts | Music continues rising from 17% → 100% |
+| **hook_end+1.7s–last 3s** | Scene montage | Music full volume |
 | **Last 3s** | Final scenes | Music fades out |
 
 ### Audio Envelope Details
@@ -81,28 +82,47 @@ The music never fully cuts out — it stays as a low bed during the hook, then t
 
 ```
 Volume level:
-  100% │                    ╱────────────────────
-       │                   ╱
-   50% │                  ╱
-       │                 ╱
-    5% │ ╱─────────────╱
-    0% │╱
-       └──────────────────────────────────────────
-       0s   0.5s   hook_start     hook_end    time
-             │black│─── dialogue ──│── ramp ──│─ full ─│
-                                   │  0.5s    │
+  100% │                         ╱──────────────────
+       │                        ╱
+   50% │                       ╱
+       │                      ╱
+   17% │ ╱───────────────────╱
+    2% │╱
+    0% │
+       └─────────────────────────────────────────────
+       0s 0.5s   hook_start    hook_end          time
+             │black│──── dialogue ────│── ramp ──│─ full ─│
+                                  └─↗ 0.3s overlap
 ```
 
-The 5% music bed during dialogue gives a sense of the song without competing with the words. The 0.5s ramp from 5% → 100% after the dialogue ends is smooth — no abrupt "drop," just a natural swell into the montage.
+The 2% music bed during dialogue gives a sense of the song without competing with the words. In the last 0.3s of dialogue, the music starts swelling to ~17% — you feel it coming but the dialogue stays clear. After dialogue ends, the music takes over fully over 1.7s.
 
-**Hook clip audio** is high-pass filtered (`highpass=f=100`) to reduce low-frequency background rumble from the original scene, keeping the dialogue clean.
+**Hook clip audio** is processed to remove non-dialogue content:
+1. `pan=mono|c0=FL+FR` — extract center channel (dialogue is center-panned, music/SFX are wider)
+2. `highpass=f=80,lowpass=f=8000` — remove rumble and high-frequency noise
+3. `afftdn=nr=12:nf=-25` — FFT noise reduction to clean residual background
+
+### Song Intro Detection
+
+Many songs have quiet intros (ambient pads, fading in) that don't fit a montage. `build_montage.py` **detects the first musical onset** and skips any silent/quiet intro before it:
+
+```python
+# Analyzes first 15s of the song
+# Finds first sustained energy peak
+# Skips anything before it
+# Backs up 1s for context
+```
+
+This means the song starts at the first meaningful moment — not awkward silence or a 10-second ambient fade-in.
 
 ### Fade Timing
 
-- **Hook audio**: high-pass filtered (`highpass=f=100`) to reduce background rumble
+- **Hook audio**: center-channel extracted (`pan=mono|c0=FL+FR`) + high/low pass + noise reduction
 - **Dialogue**: automatically boosted to ~-10dB to be clear over the music bed
-- **Music bed**: 5% volume during hook (barely audible, gives a sense of the song)
-- **Music ramp**: 0.5s smooth transition from 5% → 100% after dialogue ends
+- **Music bed**: 2% volume during early hook (barely audible)
+- **Pre-overlap**: music swells from 2% → ~17% in last 0.3s of dialogue (dialogue still dominant)
+- **Post-overlap**: music continues from 17% → 100% over 1.7s after dialogue ends
+- **Song intro**: automatically detected and skipped (starts at first musical onset)
 - **Scene audio**: Mute original scene audio entirely (use only music + hook dialogue)
 
 ### Crossfade Transitions

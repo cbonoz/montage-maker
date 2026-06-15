@@ -169,6 +169,64 @@ def detect_beat_positions(song_path: str, max_dur: float = 30.0) -> list[float]:
         return []
 
 
+def detect_song_onset(song_path: str) -> float:
+    """Detect where the song's audio energy meaningfully begins.
+
+    Many songs have silent/quiet intros (ambient pads, fading in).
+    This finds the first point where RMS energy crosses a threshold,
+    so we skip the intro and start the song when it actually kicks in.
+
+    Returns offset in seconds to skip, or 0.0 if no intro detected.
+    """
+    try:
+        r = subprocess.run([
+            "ffmpeg", "-y", "-t", "15", "-i", str(song_path),
+            "-ac", "1", "-ar", "22050", "-f", "wav", "pipe:1"
+        ], capture_output=True, timeout=15)
+        if r.returncode != 0 or len(r.stdout) < 1000:
+            return 0.0
+        samples = r.stdout[44:]
+        sample_rate = 22050
+        window = sample_rate // 50  # 20ms windows
+        hop = window // 2
+
+        energies = []
+        times = []
+        for i in range(0, len(samples) - window, hop):
+            chunk = samples[i:i+window]
+            if len(chunk) < 2:
+                continue
+            vals = [abs(int.from_bytes(chunk[j:j+2], 'little', signed=True))
+                    for j in range(0, len(chunk)-1, 2)]
+            rms = (sum(v*v for v in vals) / len(vals))**0.5 if vals else 0
+            energies.append(rms)
+            times.append(i / sample_rate)
+
+        if not energies:
+            return 0.0
+
+        # Background noise floor: median of first 2 seconds
+        pre = energies[:int(2 / (hop / sample_rate))]
+        noise_floor = sorted(pre)[len(pre)//4] if pre else 0
+
+        # Threshold: 4x the noise floor (or absolute floor of 100)
+        threshold = max(noise_floor * 4, 100.0)
+
+        # Find first time energy crosses threshold for >200ms sustained
+        min_sustain = int(0.2 / (hop / sample_rate))
+        for i in range(len(energies)):
+            if energies[i] > threshold:
+                sustained = sum(1 for j in range(i, min(len(energies), i + min_sustain))
+                                if energies[j] > threshold)
+                if sustained >= min_sustain:
+                    onset = max(0.0, times[i] - 1.0)  # back up 1s for context
+                    return round(onset, 1)
+
+        return 0.0
+    except Exception:
+        return 0.0
+
+
 def scale_pad_filter(target_w=1280, target_h=720):
     """Return an ffmpeg filter string to scale + pad to exact target resolution."""
     return (
@@ -425,7 +483,7 @@ def build(args):
 
     hook_start = BLACK_DUR
     hook_end = hook_start + hook_actual
-    transition_dur = 1.5  # smooth ramp from music bed to full after dialogue
+    transition_dur = 2.0  # smooth ramp from music bed to full (starts 1s before hook ends)
     fade_out_dur = min(3.0, vid_dur * 0.12)
 
     # These will be set during mixing, init to safe defaults for reporting
@@ -433,8 +491,12 @@ def build(args):
     dialogue_boost = 4.0
 
     if args.song and Path(args.song).exists():
-        print(f"\n🎵 Mixing: {args.song}")
         song_path = Path(args.song)
+        song_onset = detect_song_onset(song_path)
+        if song_onset > 1.0:
+            print(f"\n🎵 Mixing: {song_path.name} (skipping {song_onset:.1f}s intro)")
+        else:
+            print(f"\n🎵 Mixing: {song_path.name}")
         final_audio = work / "mixed_audio.aac"
 
         # Extract hook dialogue: isolate center channel + clean non-dialogue audio
@@ -485,11 +547,11 @@ def build(args):
         ], capture_output=True, check=True)
 
         # Mix dialogue + music
-        # Music: silent during black, 5% bed during hook, smooth ramp to
-        # full starting just before hook ends (overlaps final dialogue).
-        # Dialogue: center-channel extracted + noise reduced + boosted.
-        music_bed = 0.05  # barely audible during hook
-        ramp_start = hook_end - 0.3  # start ramp before dialogue ends (overlap)
+        # Music: silent during black, 2% bed during most of dialogue.
+        # Ramp starts 0.3s before dialogue ends — reaches ~17% by dialogue end
+        # (dialogue still dominant), then continues to 100% over remaining 1.7s.
+        music_bed = 0.02   # barely audible during early hook
+        ramp_start = hook_end - 0.3  # music starts rising just before dialogue finishes
         ramp_end = ramp_start + transition_dur
         filter_str = (
             f"[0:a]adelay=0|0[d];"
@@ -507,7 +569,7 @@ def build(args):
         subprocess.run([
             "ffmpeg", "-y",
             "-i", str(dialogue_track),
-            "-i", str(song_path),
+            "-ss", str(song_onset), "-i", str(song_path),
             "-filter_complex", filter_str,
             "-map", "[aout]",
             "-c:a", "aac", "-b:a", "192k",
