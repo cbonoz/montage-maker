@@ -20,7 +20,6 @@ Usage:
 """
 import argparse, json, subprocess, sys, tempfile, shutil, math, re
 from pathlib import Path
-from find_dialogue import extract_video_id, fetch_transcript, search
 
 TARGET_DUR = 25.0
 SCENE_DUR = 2.0
@@ -28,6 +27,15 @@ HOOK_DUR = 3.0
 BLACK_DUR = 0.5
 MAX_SCENES = 20
 DIALOGUE_LOUDNESS_TARGET = -10.0  # target dB for dialogue after boosting (loud enough to hear over music)
+
+# Color grading presets for --color-grade
+COLOR_GRADES = {
+    "dark":     "eq=brightness=-0.06:contrast=1.3:saturation=0.7:gamma=0.9",
+    "dramatic": "eq=brightness=-0.10:contrast=1.5:saturation=0.5:gamma=0.85",
+    "cool":     "eq=saturation=0.8,colorchannelmixer=rr=0.85:rg=0.1:rb=0.05:gr=0.05:gg=0.9:gb=0.05:br=0.05:bg=0.1:bb=0.85",
+    "warm":     "eq=saturation=1.2,colorchannelmixer=rr=1.1:rg=0.0:rb=0.0:gr=0.0:gg=1.0:gb=0.0:br=0.0:bg=0.1:bb=0.9",
+    "vintage":  "eq=brightness=0.02:contrast=0.9:saturation=0.4,colorchannelmixer=rr=0.9:rg=0.1:rb=0.0:gr=0.1:gg=0.8:gb=0.1:br=0.05:bg=0.1:bb=0.85",
+}
 
 
 def parse_ts(ts: str) -> float:
@@ -333,7 +341,7 @@ def build(args):
                     if rel_end <= rel_start:
                         continue
                     dt_parts.append(
-                        f"drawtext=text='{text}':{dt_font}{dt_style}:enable='between(t,{rel_start:.1f},{rel_end:.1f})'"
+                        f"drawtext=text='{text}':{dt_font}{dt_style}:enable='between(t\\,{rel_start:.1f}\\,{rel_end:.1f})'"
                     )
                 if dt_parts:
                     filter_str = ",".join(dt_parts)
@@ -343,40 +351,56 @@ def build(args):
             else:
                 raise ValueError("Not list")
         except (json.JSONDecodeError, TypeError, ValueError, KeyError):
-            # Not JSON — auto-time from transcript if URL provided
-            if args.hook_transcript_url:
-                video_id = extract_video_id(args.hook_transcript_url)
-                if video_id:
+            # Not JSON — if text has |, try auto-timing from cached transcripts
+            if "|" in args.hook_text:
+                lines = [l.strip() for l in args.hook_text.split("|") if l.strip()]
+                dt_parts = []
+                # Scan all cached transcripts for each line
+                trans_dir = Path(__file__).resolve().parent / "transcripts"
+                for tf in sorted(trans_dir.glob("*.json")):
                     try:
-                        segs = fetch_transcript(video_id)
-                        lines = [l.strip().rstrip(".,!?") for l in args.hook_text.split("|") if l.strip()]
-                        dt_parts = []
-                        for line in lines:
-                            matches = search(segs, line)
-                            if matches:
-                                for m in matches[:1]:
-                                    text = m["text"].replace("'", "'\\\\\\''").replace('"', '\\"')
-                                    rel_start = max(0.0, m["start"] - hs)
-                                    rel_end = min(hook_actual, m["end"] - hs)
-                                    if rel_end > rel_start:
-                                        dt_parts.append(
-                                            f"drawtext=text='{text}':{dt_font}{dt_style}:enable='between(t,{rel_start:.1f},{rel_end:.1f})'"
-                                        )
+                        with open(tf) as f:
+                            segs = json.load(f)
+                    except Exception:
+                        continue
+                    # Try to match each line in this transcript
+                    matched = []
+                    for line in lines:
+                        q = line.lower().rstrip(".,!?!")
+                        for s in segs:
+                            if q in s["text"].lower():
+                                matched.append({"text": line, "start": s["start"], "end": s["start"] + s["duration"]})
+                                break
+                    if len(matched) == len(lines):
+                        # All lines found in this transcript — sort by start, trim overlaps
+                        matched.sort(key=lambda x: x["start"])
+                        prev_end = 0
+                        for i, m in enumerate(matched):
+                            rel_start = max(0.0, m["start"] - hs, prev_end)
+                            rel_end = min(hook_actual, m["end"] - hs)
+                            if i < len(matched) - 1:
+                                rel_end = min(rel_end, max(0.0, matched[i+1]["start"] - hs))
+                            if rel_end > rel_start + 0.3:
+                                text = m["text"].replace("'", "'\\\\\\''").replace('"', '\\"')
+                                dt_parts.append(
+                                    f"drawtext=text='{text}':{dt_font}{dt_style}:enable='between(t\\,{rel_start:.1f}\\,{rel_end:.1f})'"
+                                )
+                                prev_end = rel_end
                         if dt_parts:
-                            filter_str = ",".join(dt_parts)
-                            n_auto = len(dt_parts)
-                            print(f"   Subtitles: {n_auto} auto-timed from transcript")
-                        else:
-                            raise ValueError("No transcript matches")
-                    except Exception as e:
-                        print(f"   ⚠️ Transcript lookup failed ({e}), using full-duration subtitle")
-                        text_escaped = args.hook_text.replace("'", "'\\\\\\''").replace('"', '\\"')
-                        filter_str = (
-                            f"drawtext=text='{text_escaped}':{dt_font}{dt_style},"
-                            f"fade=t=in:st=0:d=0.3,fade=t=out:st={hook_actual-0.5}:d=0.5"
-                        )
+                            break
+
+                if dt_parts:
+                    filter_str = ",".join(dt_parts)
+                    n_auto = len(dt_parts)
+                    print(f"   Subtitles: {n_auto} auto-timed from transcript")
                 else:
-                    raise ValueError("Invalid URL")
+                    # Fallback: single subtitle full duration
+                    text_escaped = args.hook_text.replace("'", "'\\\\\\''").replace('"', '\\"')
+                    filter_str = (
+                        f"drawtext=text='{text_escaped}':{dt_font}{dt_style},"
+                        f"fade=t=in:st=0:d=0.3,fade=t=out:st={hook_actual-0.5}:d=0.5"
+                    )
+                    print(f"   Subtitle: \"{args.hook_text}\" (full duration)")
             else:
                 # Plain string — single subtitle for full hook duration
                 text_escaped = args.hook_text.replace("'", "'\\\\\\''").replace('"', '\\"')
@@ -399,6 +423,8 @@ def build(args):
         if dur > 0:
             hook_path = subtitled
         else:
+            print(f"   ⚠️ Subtitle overlay failed, using raw hook")
+        # (end subtitle block)
             print(f"   ⚠️ Subtitle overlay failed, using raw hook")
 
     # Snap hook duration to nearest beat
@@ -638,7 +664,7 @@ def build(args):
         # Music: silent during black, 2% bed during most of dialogue.
         # Ramp starts 0.3s before dialogue ends — reaches ~17% by dialogue end
         # (dialogue still dominant), then continues to 100% over remaining 1.7s.
-        music_bed = 0.02   # barely audible during early hook
+        music_bed = 0.12   # montage song audible during hook, masks residual clip audio
         ramp_start = hook_end - 0.3  # music starts rising just before dialogue finishes
         ramp_end = ramp_start + transition_dur
         filter_str = (
@@ -695,16 +721,34 @@ def build(args):
     ], capture_output=True, check=True)
 
     print("\n🎬 Muxing final video...")
-    subprocess.run([
-        "ffmpeg", "-y",
-        "-i", str(raw_vid), "-i", str(trimmed_audio),
-        "-c:v", "copy",
-        "-map", "0:v:0", "-map", "1:a:0",
-        "-c:a", "aac", "-b:a", "192k",
-        "-shortest",
-        "-movflags", "+faststart",
-        str(out)
-    ], capture_output=True, check=True)
+    grade_filter = None
+    if args.color_grade:
+        grade_filter = COLOR_GRADES.get(args.color_grade, args.color_grade)
+        print(f"   Color grade: {args.color_grade}")
+    if grade_filter:
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-i", str(raw_vid), "-i", str(trimmed_audio),
+            "-filter_complex", f"[0:v]{grade_filter}[v]",
+            "-map", "[v]", "-map", "1:a:0",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            "-c:a", "aac", "-b:a", "192k",
+            "-pix_fmt", "yuv420p",
+            "-shortest",
+            "-movflags", "+faststart",
+            str(out)
+        ], capture_output=True, check=True)
+    else:
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-i", str(raw_vid), "-i", str(trimmed_audio),
+            "-c:v", "copy",
+            "-map", "0:v:0", "-map", "1:a:0",
+            "-c:a", "aac", "-b:a", "192k",
+            "-shortest",
+            "-movflags", "+faststart",
+            str(out)
+        ], capture_output=True, check=True)
 
     # --- Step 8: cleanup ---
     actual_dur = probe_dur(out)
@@ -749,11 +793,11 @@ def main():
     p.add_argument("--transition", choices=["cut", "crossfade"], default="cut",
                        help="Scene transition style: cut or crossfade (default: cut)")
     p.add_argument("--hook-text", default=None,
-                       help="Dramatic subtitle text to overlay during the hook (e.g. 'I will have my vengeance'). "
-                            "Can be a JSON array from find_dialogue.py, or plain text separated by | for auto-timing.")
-    p.add_argument("--hook-transcript-url", default=None,
-                       help="YouTube URL for automatic subtitle timing from transcript. "
-                            "Splits --hook-text by | and finds each line in the transcript.")
+                       help="Dramatic subtitle text. Use | to separate timed lines (auto-timed from cached transcripts). "
+                            "Or JSON array from find_dialogue.py for explicit timestamps.")
+    p.add_argument("--color-grade", default=None,
+                       help=f"Color grade preset: {', '.join(COLOR_GRADES.keys())}. "
+                            "Or any ffmpeg filter string (e.g. 'eq=brightness=-0.1:contrast=1.5').")
     p.add_argument("--keep", action="store_true", help="Keep temp files")
 
     ok = build(p.parse_args())
