@@ -415,17 +415,18 @@ def build(args):
     #
     # Audio envelope:
     #   0 - hook_start: silence (black lead-in)
-    #   hook_start - hook_end: dialogue only (no music, clean dialogue)
-    #   hook_end: music fades in (first scene cut)
+    #   hook_start - hook_end: dialogue full volume, music at 5% (barely audible bed)
+    #   hook_end: music ramps from 5% to 100% over transition_dur (smooth)
     #   hook_end - end: music full
     #   last 3s: music fade out
     #
-    # Dialogue is boosted to ~-10dB to cut through the music.
+    # Hook clip audio: high-pass filtered to reduce non-dialogue rumble,
+    # then boosted to ~-10dB to cut through the music.
 
     hook_start = BLACK_DUR
     hook_end = hook_start + hook_actual
+    transition_dur = 0.5  # smooth ramp from music bed to full after dialogue
     fade_out_dur = min(3.0, vid_dur * 0.12)
-    music_drop_dur = 0.15  # how fast music goes from 20% -> 100% at hook end
 
     # These will be set during mixing, init to safe defaults for reporting
     hook_db = -999.0
@@ -436,10 +437,11 @@ def build(args):
         song_path = Path(args.song)
         final_audio = work / "mixed_audio.aac"
 
-        # Extract hook dialogue
+        # Extract hook dialogue with high-pass filter to reduce non-dialogue rumble
         hook_audio = work / "hook_audio.aac"
         subprocess.run([
             "ffmpeg", "-y", "-i", str(hook_path), "-vn",
+            "-af", "highpass=f=100",
             "-c:a", "aac", str(hook_audio)
         ], capture_output=True, check=True)
 
@@ -478,12 +480,18 @@ def build(args):
         ], capture_output=True, check=True)
 
         # Mix dialogue + music
-        # Music is silent during hook (dialogue only), then fades in at first scene cut
+        # Music: silent during black, 5% bed during hook, smooth ramp to
+        # full after dialogue ends, fade out at end.
+        # Dialogue: high-passed + boosted to cut through.
+        music_bed = 0.05  # barely audible during hook
+        ramp_end = hook_end + transition_dur
         filter_str = (
             f"[0:a]adelay=0|0[d];"
             f"[1:a]adelay=0|0,"
-            f"volume=0:enable='lt(t,{hook_end})',"
-            f"afade=t=in:st={hook_end}:d={music_drop_dur},"
+            f"volume="
+            f"'if(lte(t,{hook_start}),0,"
+            f"if(lt(t,{hook_end}),{music_bed},"
+            f"if(lt(t,{ramp_end}),{music_bed}+(t-{hook_end})/{transition_dur}*{1-music_bed},1)))':eval=frame,"
             f"afade=t=out:st={vid_dur-fade_out_dur}:d={fade_out_dur}[m];"
             f"[d]volume={dialogue_boost}[d_boosted];"
             f"[d_boosted][m]amix=inputs=2:duration=longest:dropout_transition=0,"
@@ -549,7 +557,7 @@ def build(args):
     print(f"   Duration: {fmt(actual_dur)} (max: {fmt(max_dur)})")
     print(f"   Size: {size_mb:.1f} MB")
     print(f"   BPM: {bpm} | Beat: {beat_sec:.2f}s | Scene dur: {fmt(actual_scene_dur)} ({int(actual_scene_dur/beat_sec)} beats)")
-    print(f"   Audio: {fmt(BLACK_DUR)}s silence -> {fmt(hook_actual)}s dialogue only -> {(actual_dur - hook_end):.1f}s music")
+    print(f"   Audio: {fmt(BLACK_DUR)}s silence -> {fmt(hook_actual)}s dialogue+low music -> {(actual_dur - hook_end):.1f}s music full")
     if beat_positions:
         print(f"   Beat-aligned: scenes snapped to {len(beat_positions)} detected transients")
     print(f"   Transition: {args.transition}")

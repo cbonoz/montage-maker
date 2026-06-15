@@ -70,28 +70,39 @@ Example: At 80 BPM, a 4-beat measure = 3 seconds. Cut scenes to land at 0s, 3s, 
 | Time range | Video | Audio |
 |------------|-------|-------|
 | **0–0.5s** | Black lead-in | Silence |
-| **0.5s–hook_end** | Hook dialogue clip | Dialogue only — **no music** (clean, isolated dialogue) |
-| **hook_end** (the drop) | First scene cut begins | Music fades in over 0.15s |
-| **hook_end–last 3s** | Scene montage | Music full volume |
+| **0.5s–hook_end** | Hook dialogue clip | Dialogue full volume + **music at 5%** (barely audible bed) |
+| **hook_end–hook_end+0.5s** | First scene cuts | Music ramps smoothly from 5% → 100% |
+| **hook_end+0.5s–last 3s** | Scene montage | Music full volume |
 | **Last 3s** | Final scenes | Music fades out |
 
-### Music Drop Timing
+### Audio Envelope Details
 
-The music is completely silent during the hook — only the native dialogue audio is heard. This creates two effects:
-
-- **Clean focus on the quote** — no music competes with the words
-- **Dramatic impact** — when the hook ends, the music enters fresh alongside the first scene cut, hitting like a new chapter
+The music never fully cuts out — it stays as a low bed during the hook, then transitions smoothly:
 
 ```
-Audio Timeline:
-  [silence 0.5s] → [dialogue only 6.4s] → [music fades in 0.15s] → [music full → fade out 3s]
-                                          ↑ first scene cut lands here
+Volume level:
+  100% │                    ╱────────────────────
+       │                   ╱
+   50% │                  ╱
+       │                 ╱
+    5% │ ╱─────────────╱
+    0% │╱
+       └──────────────────────────────────────────
+       0s   0.5s   hook_start     hook_end    time
+             │black│─── dialogue ──│── ramp ──│─ full ─│
+                                   │  0.5s    │
 ```
+
+The 5% music bed during dialogue gives a sense of the song without competing with the words. The 0.5s ramp from 5% → 100% after the dialogue ends is smooth — no abrupt "drop," just a natural swell into the montage.
+
+**Hook clip audio** is high-pass filtered (`highpass=f=100`) to reduce low-frequency background rumble from the original scene, keeping the dialogue clean.
 
 ### Fade Timing
 
-- **Dialogue fade-out**: instantaneous at hook end (dialogue stops, music takes over)
-- **Music drop**: 0.15s ramp from 20% → 100% at hook end (the "drop")
+- **Hook audio**: high-pass filtered (`highpass=f=100`) to reduce background rumble
+- **Dialogue**: automatically boosted to ~-10dB to be clear over the music bed
+- **Music bed**: 5% volume during hook (barely audible, gives a sense of the song)
+- **Music ramp**: 0.5s smooth transition from 5% → 100% after dialogue ends
 - **Scene audio**: Mute original scene audio entirely (use only music + hook dialogue)
 
 ### Crossfade Transitions
