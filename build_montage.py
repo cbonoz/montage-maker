@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Movie montage maker: black → hook (dialogue audible) → beat-synced scene montage + music → fade out.
+Movie montage maker: black → hook (dialogue only) → silent scene crossfade + music → fade out.
 
 Structure:
-  [0.5s black] → [hook with dialogue audible, music building] → [beat-synced scene cuts, music full] → [fade out]
+  [0.5s black] → [hook dialogue only, no music] → [crossfaded beat-synced scene cuts, music starts at cut] → [fade out]
 
 Features:
   - Beat-synced cut timing (--bpm or auto-detect)
@@ -415,8 +415,8 @@ def build(args):
     #
     # Audio envelope:
     #   0 - hook_start: silence (black lead-in)
-    #   hook_start - hook_end: music at 20% volume (present but low, dialogue dominant)
-    #   hook_end: music "drops" to 100% (dramatic release on first scene cut)
+    #   hook_start - hook_end: dialogue only (no music, clean dialogue)
+    #   hook_end: music fades in (first scene cut)
     #   hook_end - end: music full
     #   last 3s: music fade out
     #
@@ -478,14 +478,12 @@ def build(args):
         ], capture_output=True, check=True)
 
         # Mix dialogue + music
-        # Music at 20% during hook, then drops to 100% at first scene cut
+        # Music is silent during hook (dialogue only), then fades in at first scene cut
         filter_str = (
             f"[0:a]adelay=0|0[d];"
             f"[1:a]adelay=0|0,"
-            f"volume=0:enable='lt(t,{hook_start})',"
-            f"volume=0.20:enable='between(t,{hook_start},{hook_end})':eval=frame,"
+            f"volume=0:enable='lt(t,{hook_end})',"
             f"afade=t=in:st={hook_end}:d={music_drop_dur},"
-            f"volume=1.0:enable='gte(t,{hook_end})':eval=frame,"
             f"afade=t=out:st={vid_dur-fade_out_dur}:d={fade_out_dur}[m];"
             f"[d]volume={dialogue_boost}[d_boosted];"
             f"[d_boosted][m]amix=inputs=2:duration=longest:dropout_transition=0,"
@@ -551,7 +549,7 @@ def build(args):
     print(f"   Duration: {fmt(actual_dur)} (max: {fmt(max_dur)})")
     print(f"   Size: {size_mb:.1f} MB")
     print(f"   BPM: {bpm} | Beat: {beat_sec:.2f}s | Scene dur: {fmt(actual_scene_dur)} ({int(actual_scene_dur/beat_sec)} beats)")
-    print(f"   Audio: {fmt(BLACK_DUR)}s silence -> {fmt(hook_actual)}s dialogue+music -> {(actual_dur - hook_end):.1f}s music only")
+    print(f"   Audio: {fmt(BLACK_DUR)}s silence -> {fmt(hook_actual)}s dialogue only -> {(actual_dur - hook_end):.1f}s music")
     if beat_positions:
         print(f"   Beat-aligned: scenes snapped to {len(beat_positions)} detected transients")
     print(f"   Transition: {args.transition}")

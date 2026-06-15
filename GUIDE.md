@@ -70,26 +70,22 @@ Example: At 80 BPM, a 4-beat measure = 3 seconds. Cut scenes to land at 0s, 3s, 
 | Time range | Video | Audio |
 |------------|-------|-------|
 | **0–0.5s** | Black lead-in | Silence |
-| **0.5s–hook_end** | Hook dialogue clip | Dialogue full volume + music at 20% (present but low) |
-| **hook_end** (the drop) | First scene cut begins | Music instantly jumps to 100% — the "drop" moment |
+| **0.5s–hook_end** | Hook dialogue clip | Dialogue only — **no music** (clean, isolated dialogue) |
+| **hook_end** (the drop) | First scene cut begins | Music fades in over 0.15s |
 | **hook_end–last 3s** | Scene montage | Music full volume |
 | **Last 3s** | Final scenes | Music fades out |
 
 ### Music Drop Timing
 
-The most dramatic improvement to post-dialogue editing is the **music drop**:
+The music is completely silent during the hook — only the native dialogue audio is heard. This creates two effects:
 
-- During the hook, music stays at **20% volume** — audible but not competing with dialogue
-- At the **instant the hook ends** (first scene cut), music jumps to **100% within 0.15s**
-- This creates a deliberate **release moment** — the dialogue finishes, the music "hits," and the visual montage begins with full energy
+- **Clean focus on the quote** — no music competes with the words
+- **Dramatic impact** — when the hook ends, the music enters fresh alongside the first scene cut, hitting like a new chapter
 
-Compare:
 ```
-Before: music_fade gradually over 1.5s → music at 100%
-        (blurry transition, no impact moment)
-
-After:  music at 20% during hook → instant jump to 100%
-        (sharp drop, scene cut hits harder)
+Audio Timeline:
+  [silence 0.5s] → [dialogue only 6.4s] → [music fades in 0.15s] → [music full → fade out 3s]
+                                          ↑ first scene cut lands here
 ```
 
 ### Fade Timing
