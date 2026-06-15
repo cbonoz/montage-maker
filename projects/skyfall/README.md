@@ -6,7 +6,7 @@ A collection of montages from the James Bond film Skyfall, exploring themes of l
 
 ### 1. skyfall_loyalty — "I need you back"
 
-**Status:** 📝 Planned
+**Status:** ✅ Built
 
 **Hook (two-party):**
 > **M:** "I need you back."
@@ -19,27 +19,36 @@ A collection of montages from the James Bond film Skyfall, exploring themes of l
 **Music:** sb_snowfall @ 80 BPM
 **Alt Music:** Penumbra
 
-**Source clips needed:**
-- `hook_loyalty.mp4` — M summoning Bond after the botched mission
+**Output:** `output/skyfall_loyalty_montage.mp4`
+
+**Source clips used:**
+- `hook_ms_apartment.mp4` — M's apartment scene (hook at 68-72s from silencedetect analysis)
 - `scenes_compilation.mp4` — Skyfall best scenes compilation
 
-**Scenes to sample:**
-- The opening chase in Istanbul (high-octane, Bond in action)
-- Bond falling from the bridge (vulnerability)
-- The title sequence (stylized, iconic)
-- Silva's introduction (menace and mystery)
-- The island lair (exotic scale)
-- Shanghai skyscraper fight (neon-lit, vertical action)
-- The tube train fight (intimate conflict)
-- The Scottish manor finale (personal stakes)
+**Scenes sampled:**
+- Opening chase in Istanbul
+- Bond falling from the bridge
+- Silva's introduction
+- Shanghai skyscraper fight
+- Tube train fight
+- Scottish manor finale
 
 **Mood:** Defiance, loyalty, the spy game, power dynamics, Bond's return
 
-**Build Command (when ready):**
+**Build:**
 
 ```bash
-# Build skyfall_loyalty montage
-python build_montage.py projects/skyfall sounds/sb_snowfall.mp3 --bpm 80
+python build_montage.py \
+    projects/skyfall/source/scenes_compilation.mp4 \
+    --hook-movie projects/skyfall/source/hook_ms_apartment.mp4 \
+    --hook 68-72 --hook-dur 4 \
+    --bpm 80 \
+    --scenes \
+        30-33 60-63 90-93 120-123 150-153 180-183 \
+        210-213 240-243 270-273 300-303 330-333 360-363 \
+    --song sounds/sb_snowfall.mp3 \
+    --max-dur 30 --scene-dur 1.5 \
+    --output projects/skyfall/output/skyfall_loyalty_montage.mp4
 ```
 
 ## Notes

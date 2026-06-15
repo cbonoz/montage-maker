@@ -22,6 +22,6 @@ shawshank_hope_is_good,The Shawshank Redemption,Hope is a good thing,📝 Planne
 dead_poets_carpe_diem,Dead Poets Society,Carpe diem,📝 Planned,Passion; nonconformity; living authentically,FirstSnow,Moonlight,75,,Keating's full speech; thesis of the film
 pursuit_of_happyness_dont_let_somebody,The Pursuit of Happyness,Don't let somebody tell you,📝 Planned,Perseverance; fatherhood; american dream,FirstSnow,Moonlight,75,,Chris Gardner to his son; earned conviction
 rocky_get_hit,Rocky Balboa,It's not about how hard you hit,📝 Planned,Grit; perseverance; defying the odds,Moonlight,sb_snowfall,80,,Rocky to his son; universal life metaphor
-skyfall_loyalty,Skyfall,I need you back,📝 Planned,Defiance; loyalty; spy game dynamics,sb_snowfall,Penumbra,80,,M + Bond exchange; "I never left" twist; three words each
+skyfall_loyalty,Skyfall,"I need you back; I never left",✅ Built,Defiance; loyalty; spy game dynamics,sb_snowfall,Penumbra,80,projects/skyfall/output/skyfall_loyalty_montage.mp4,M + Bond exchange; three words each; built montage
 gladiator_vengeance,Gladiator,"I will have my vengeance, in this life or the next",✅ Built,Vengeance; honor; gladiatorial epic,Moonlight,,75,output/gladiator_montage.mp4,Full Maximus speech (helmet reveal); built
 gladiator_vengeance_short,Gladiator,"I will have my vengeance",✅ Built,Vengeance; honor; punchy cut,Moonlight,,75,output/gladiator_vengeance_montage.mp4,Short hook only; found via find_dialogue.py; built
