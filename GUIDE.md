@@ -191,6 +191,11 @@ python build_montage.py movie.mp4 --hook "$TIMING" ...
 
 **How it works:** Fetches YouTube's existing captions (auto-generated or manual) via `youtube-transcript-api`, then searches for the dialogue text. Transcripts are cached locally in `transcripts/` for reuse.
 
+**When to use transcripts:**
+- **Hook dialogue** — always use `find_dialogue.py` to get exact timestamps (the dialogue needs to be word-perfect and cleanly extracted)
+- **Scene clips** — transcripts are not needed. Scene audio is muted entirely (replaced by music). Just pick timestamps that give visual variety — different locations, lighting, action levels
+- The beat alignment (`detect_beat_positions`) and crossfade transitions handle the rest
+
 **Limitations:**
 - Only works for YouTube videos that have captions enabled
 - Auto-generated captions may mangle words (e.g., "vengeance" → "venyards")
