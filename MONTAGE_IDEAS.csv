@@ -1,0 +1,26 @@
+project_id,film,dialogue_hook,status,mood,music_primary,music_alt,bpm,output_file,notes
+hp_yer_a_wizard,Harry Potter and the Philosopher's Stone,"Yer a wizard, Harry",✅ Built,Magical awakening; wonder; discovery,sb_snowfall,Meanwhile,80,output/hp_montage_30s_final.mp4,Hagrid's two-party dialogue; established montage
+hp_hermione_arrival,Harry Potter and the Philosopher's Stone,You are a wizard; Harry,🔁 Reusable,Friendships forming; wonder; trio's first adventure,Moonlight,Meanwhile,80,,Reuses clips from hp_yer_a_wizard project
+hp_always,Harry Potter and the Deathly Hallows,Always,✅ Built,Snape's memories; love; sacrifice,FirstSnow,,75,output/hp_always_montage.mp4,Snape theme; emotional payoff
+dk_hero_villain,The Dark Knight,You either die a hero...,✅ Built,Tragic fall; duality; moral decay,Penumbra,Unraveling,70,output/dark_knight_montage.mp4,Batman + Joker interrogation exchange; built montage
+dk_joker_interrogation,The Dark Knight,Why do you wanna kill me?,✅ Built,Conflict; obsession; duality,Penumbra,,70,,Joker interrogation scene; alternative Dark Knight hook
+dk_bane_strength,The Dark Knight Rises,Peace has cost you your strength,📝 Planned,Power loss; tragic vulnerability; class conflict,Penumbra,,75,,Reuses existing scenes_compilation.mp4 (timestamps 242-282s)
+jp_life_finds_way,Jurassic Park,Life finds a way,⚠️ Light dialogue,Awe → wonder → terror; hubris meets nature,sb_snowfall,Meanwhile,80,,Malcolm's dinner debate speech; needs strong visuals
+interstellar_mankind_born,Interstellar,Mankind was born on Earth,📝 Planned,Melancholic wonder; humanity reaching for survival,Unraveling,Penumbra,75,,Cooper's speech about overcoming the impossible
+lotr_cant_carry,The Lord of the Rings,I can't carry it for you,📝 Planned,Fellowship; sacrifice; hope against impossible odds,sb_snowfall,Meanwhile,80,,Sam carries Frodo monologue; full exchange establishes despair
+social_network_friends,The Social Network,500 million friends,📝 Planned,Ambitious; obsessive; price of building something big,FirstSnow,,70,,Mark in depositions; "without making a few enemies"
+good_will_hunting_its_not_your_fault,Good Will Hunting,It's not your fault,📝 Planned,Emotional release; healing; breakthrough,FirstSnow,Moonlight,70,,Sean's repetition scene; park bench catharsis
+the_matrix_what_is_real,The Matrix,What is real?,📝 Planned,Cyberpunk awakening; reality-shifting; badass,Meanwhile,Penumbra,80,,Morpheus red pill / blue pill choice
+princess_bride_inigo,The Princess Bride,Hello; My name is Inigo Montoya,⚠️ Light dialogue,Adventurous; swashbuckling; heartfelt,Moonlight,FirstSnow,80,,Iconic catchphrase; works with strong visuals only
+star_wars_chosen_one,Star Wars,You were the Chosen One,📝 Planned,Tragedy; fallen hero; father-son conflict,Unraveling,Penumbra,75,,Obi-Wan's speech on Mustafar; Anakin arc
+wolf_of_wall_street_leaving,The Wolf of Wall Street,I'm not leaving,⚠️ Light dialogue,Chaotic; high-energy; excess; pure momentum,FirstSnow,,70,,Pure energy line; works better with original scene audio
+godfather_transformation,The Godfather,Just when I thought I was out,📝 Planned,Power; family; cold ruthlessness; transformation,sb_snowfall,Penumbra,80,,Michael's arc; baptism intercut theme
+blade_runner_contemplation,Blade Runner 2049,Sometimes to love someone,📝 Planned,Lonely; contemplative; futuristic noir,Penumbra,Meanwhile,70,,K's baseline test / Joi's goodbye; philosophical tone
+there_will_be_blood_milkshake,There Will Be Blood,I drink your milkshake,⚠️ Light dialogue,Obsession; greed; madness; iconic delivery,sb_snowfall,,80,,Plainview's speech; absurdist power; needs context
+incredibles_no_capes,The Incredibles,No capes,⚠️ Light dialogue,Fun; action-packed; family; edna mode rant,Moonlight,Meanwhile,80,,Edna's rant; works with superhero action visuals
+shawshank_hope_is_good,The Shawshank Redemption,Hope is a good thing,📝 Planned,Hope; perseverance; friendship across walls,Meanwhile,sb_snowfall,80,,Red's letter reading / final parole speech; character arc
+dead_poets_carpe_diem,Dead Poets Society,Carpe diem,📝 Planned,Passion; nonconformity; living authentically,FirstSnow,Moonlight,75,,Keating's full speech; thesis of the film
+pursuit_of_happyness_dont_let_somebody,The Pursuit of Happyness,Don't let somebody tell you,📝 Planned,Perseverance; fatherhood; american dream,FirstSnow,Moonlight,75,,Chris Gardner to his son; earned conviction
+rocky_get_hit,Rocky Balboa,It's not about how hard you hit,📝 Planned,Grit; perseverance; defying the odds,Moonlight,sb_snowfall,80,,Rocky to his son; universal life metaphor
+skyfall_loyalty,Skyfall,I need you back,📝 Planned,Defiance; loyalty; spy game dynamics,sb_snowfall,Penumbra,80,,M + Bond exchange; "I never left" twist; three words each
+gladiator_vengeance,Gladiator,I will have my vengeance,✅ Built,Vengeance; honor; gladiatorial epic,Moonlight,,75,output/gladiator_montage.mp4,Maximus removes helmet in Colosseum; built montage
