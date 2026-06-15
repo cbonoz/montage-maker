@@ -5,8 +5,12 @@
 *.mov
 *.avi
 
-# Keep sounds checked in (CC BY 4.0, small, needed for builds)
-# *.mp3
+# Audio source files (large, should be downloaded separately)
+*.mp3
+*.wav
+*.flac
+*.aac
+*.ogg
 
 # Generated output per project
 projects/*/output/
