@@ -97,10 +97,12 @@ Volume level:
 
 The 2% music bed during dialogue gives a sense of the song without competing with the words. In the last 0.3s of dialogue, the music starts swelling to ~17% — you feel it coming but the dialogue stays clear. After dialogue ends, the music takes over fully over 1.7s.
 
-**Hook clip audio** is processed to remove non-dialogue content:
+**Hook clip audio** is processed to **remove original background music/SFX**, replacing it with the montage song:
 1. `pan=mono|c0=FL+FR` — extract center channel (dialogue is center-panned, music/SFX are wider)
-2. `highpass=f=80,lowpass=f=8000` — remove rumble and high-frequency noise
-3. `afftdn=nr=12:nf=-25` — FFT noise reduction to clean residual background
+2. `highpass=f=150,lowpass=f=5000` — keep only speech frequencies
+3. `afftdn=nr=15:nf=-30` — FFT noise reduction to clean residual background
+
+The montage song becomes the **sole background audio** — it plays at 2% during the hook (barely audible), then swells to full volume when scenes begin.
 
 ### Song Intro Detection
 
@@ -227,7 +229,26 @@ python build_montage.py movie.mp4 --hook "$TIMING" ...
 - **Scene clips** — transcripts are not needed. Scene audio is muted entirely (replaced by music). Just pick timestamps that give visual variety — different locations, lighting, action levels
 - The beat alignment (`detect_beat_positions`) and crossfade transitions handle the rest
 
-**Limitations:**
+### Automatic Timed Subtitles
+
+When building a montage, `build_montage.py` can auto-time subtitles from the transcript:
+
+```bash
+python build_montage.py movie.mp4 \
+    --hook-movie hook.mp4 \
+    --hook 64-70 \
+    --hook-text "I need you back.|I never left." \
+    --hook-transcript-url "https://www.youtube.com/watch?v=WFwmDq-MKaE" \
+    --song sounds/sb_snowfall.mp3 --bpm 80 \
+    --output output.mp4
+```
+
+- Split multiple lines with `|`
+- Each line is searched in the transcript and timed to appear exactly when spoken
+- Punctuation is stripped for matching (`.`, `,`, `!`, `?`)
+- Transcript is cached in `transcripts/` for reuse
+
+### Limitations
 - Only works for YouTube videos that have captions enabled
 - Auto-generated captions may mangle words (e.g., "vengeance" → "venyards")
 - Use broader search terms or adjacent text when exact phrases fail

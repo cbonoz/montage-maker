@@ -20,6 +20,7 @@ Usage:
 """
 import argparse, json, subprocess, sys, tempfile, shutil, math, re
 from pathlib import Path
+from find_dialogue import extract_video_id, fetch_transcript, search
 
 TARGET_DUR = 25.0
 SCENE_DUR = 2.0
@@ -316,16 +317,14 @@ def build(args):
     # --- Step 1b: overlay dramatic subtitle on hook if --hook-text provided ---
     if args.hook_text and hook_path.exists():
         subtitled = work / "hook_subtitled.mp4"
-        # Parse --hook-text: plain string (single subtitle full duration)
-        # or JSON array (timed entries from find_dialogue.py --output json)
         dt_font = "fontfile=/System/Library/Fonts/HelveticaNeue.ttc:fontsize=32:fontcolor=white:"
         dt_style = "box=1:boxcolor=black@0.5:boxborderw=12:x=(w-text_w)/2:y=h-text_h-40:"
         dt_style += "shadowx=2:shadowy=2:shadowcolor=black@0.6"
 
+        # Try JSON (explicit timed entries)
         try:
             entries = json.loads(args.hook_text)
             if isinstance(entries, list):
-                # Timed subtitles from find_dialogue.py JSON output
                 dt_parts = []
                 for ent in entries:
                     text = ent["text"].replace("'", "'\\\\\\''").replace('"', '\\"')
@@ -336,20 +335,56 @@ def build(args):
                     dt_parts.append(
                         f"drawtext=text='{text}':{dt_font}{dt_style}:enable='between(t,{rel_start:.1f},{rel_end:.1f})'"
                     )
-                if not dt_parts:
-                    raise ValueError("No valid subtitle entries")
-                filter_str = ",".join(dt_parts)
-                print(f"   Subtitles: {len(entries)} timed entries from transcript")
+                if dt_parts:
+                    filter_str = ",".join(dt_parts)
+                    print(f"   Subtitles: {len(entries)} timed entries")
+                else:
+                    raise ValueError("Empty")
             else:
-                raise ValueError("Not a list")
+                raise ValueError("Not list")
         except (json.JSONDecodeError, TypeError, ValueError, KeyError):
-            # Plain string — single subtitle for full hook duration
-            text_escaped = args.hook_text.replace("'", "'\\\\\\''").replace('"', '\\"')
-            filter_str = (
-                f"drawtext=text='{text_escaped}':{dt_font}{dt_style},"
-                f"fade=t=in:st=0:d=0.3,fade=t=out:st={hook_actual-0.5}:d=0.5"
-            )
-            print(f"   Subtitle: \"{args.hook_text}\"")
+            # Not JSON — auto-time from transcript if URL provided
+            if args.hook_transcript_url:
+                video_id = extract_video_id(args.hook_transcript_url)
+                if video_id:
+                    try:
+                        segs = fetch_transcript(video_id)
+                        lines = [l.strip().rstrip(".,!?") for l in args.hook_text.split("|") if l.strip()]
+                        dt_parts = []
+                        for line in lines:
+                            matches = search(segs, line)
+                            if matches:
+                                for m in matches[:1]:
+                                    text = m["text"].replace("'", "'\\\\\\''").replace('"', '\\"')
+                                    rel_start = max(0.0, m["start"] - hs)
+                                    rel_end = min(hook_actual, m["end"] - hs)
+                                    if rel_end > rel_start:
+                                        dt_parts.append(
+                                            f"drawtext=text='{text}':{dt_font}{dt_style}:enable='between(t,{rel_start:.1f},{rel_end:.1f})'"
+                                        )
+                        if dt_parts:
+                            filter_str = ",".join(dt_parts)
+                            n_auto = len(dt_parts)
+                            print(f"   Subtitles: {n_auto} auto-timed from transcript")
+                        else:
+                            raise ValueError("No transcript matches")
+                    except Exception as e:
+                        print(f"   ⚠️ Transcript lookup failed ({e}), using full-duration subtitle")
+                        text_escaped = args.hook_text.replace("'", "'\\\\\\''").replace('"', '\\"')
+                        filter_str = (
+                            f"drawtext=text='{text_escaped}':{dt_font}{dt_style},"
+                            f"fade=t=in:st=0:d=0.3,fade=t=out:st={hook_actual-0.5}:d=0.5"
+                        )
+                else:
+                    raise ValueError("Invalid URL")
+            else:
+                # Plain string — single subtitle for full hook duration
+                text_escaped = args.hook_text.replace("'", "'\\\\\\''").replace('"', '\\"')
+                filter_str = (
+                    f"drawtext=text='{text_escaped}':{dt_font}{dt_style},"
+                    f"fade=t=in:st=0:d=0.3,fade=t=out:st={hook_actual-0.5}:d=0.5"
+                )
+                print(f"   Subtitle: \"{args.hook_text}\"")
 
         subprocess.run([
             "ffmpeg", "-y", "-i", str(hook_path),
@@ -560,8 +595,8 @@ def build(args):
             "ffmpeg", "-y", "-i", str(hook_path), "-vn",
             "-af",
             "pan=mono|c0=FL+FR,"
-            "highpass=f=80,lowpass=f=8000,"
-            "afftdn=nr=12:nf=-25",
+            "highpass=f=150,lowpass=f=5000,"
+            "afftdn=nr=15:nf=-30",
             "-c:a", "aac", str(hook_audio)
         ], capture_output=True, check=True)
 
@@ -714,7 +749,11 @@ def main():
     p.add_argument("--transition", choices=["cut", "crossfade"], default="cut",
                        help="Scene transition style: cut or crossfade (default: cut)")
     p.add_argument("--hook-text", default=None,
-                       help="Dramatic subtitle text to overlay during the hook (e.g. 'I will have my vengeance')")
+                       help="Dramatic subtitle text to overlay during the hook (e.g. 'I will have my vengeance'). "
+                            "Can be a JSON array from find_dialogue.py, or plain text separated by | for auto-timing.")
+    p.add_argument("--hook-transcript-url", default=None,
+                       help="YouTube URL for automatic subtitle timing from transcript. "
+                            "Splits --hook-text by | and finds each line in the transcript.")
     p.add_argument("--keep", action="store_true", help="Keep temp files")
 
     ok = build(p.parse_args())
