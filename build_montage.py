@@ -313,6 +313,34 @@ def build(args):
     hook_path = work / "hook.mp4"
     hook_actual = extract_with_audio(str(hook_movie), hs, hs + raw_hook_dur, hook_path)
 
+    # --- Step 1b: overlay dramatic subtitle on hook if --hook-text provided ---
+    if args.hook_text and hook_path.exists():
+        subtitled = work / "hook_subtitled.mp4"
+        text_escaped = args.hook_text.replace("'", "'\\\\\\''").replace('"', '\\"')
+        # Semi-transparent black bar at bottom third + white text with shadow
+        subprocess.run([
+            "ffmpeg", "-y", "-i", str(hook_path),
+            "-vf",
+            f"drawtext=text='{text_escaped}':"
+            f"fontfile=/System/Library/Fonts/HelveticaNeue.ttc:"
+            f"fontsize=32:fontcolor=white:"
+            f"box=1:boxcolor=black@0.5:boxborderw=12:"
+            f"x=(w-text_w)/2:y=h-text_h-40:"
+            f"shadowx=2:shadowy=2:shadowcolor=black@0.6,"
+            f"fade=t=in:st=0:d=0.3,fade=t=out:st={hook_actual-0.5}:d=0.5",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            "-c:a", "copy",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            str(subtitled)
+        ], capture_output=True, check=True, timeout=60)
+        dur = probe_dur(subtitled)
+        if dur > 0:
+            hook_path = subtitled
+            print(f"   Subtitle: \"{args.hook_text}\"")
+        else:
+            print(f"   ⚠️ Subtitle overlay failed, using raw hook")
+
     # Snap hook duration to nearest beat
     hook_actual = max(beat_sec, round(hook_actual / beat_sec) * beat_sec)
 
@@ -660,6 +688,8 @@ def main():
                        help=f"Max hook duration (default: {HOOK_DUR}s)")
     p.add_argument("--transition", choices=["cut", "crossfade"], default="cut",
                        help="Scene transition style: cut or crossfade (default: cut)")
+    p.add_argument("--hook-text", default=None,
+                       help="Dramatic subtitle text to overlay during the hook (e.g. 'I will have my vengeance')")
     p.add_argument("--keep", action="store_true", help="Keep temp files")
 
     ok = build(p.parse_args())
