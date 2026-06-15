@@ -1,0 +1,15 @@
+# Video source clips (large binary files)
+*.mp4
+*.webm
+*.mkv
+*.mov
+*.avi
+
+# Audio source files (keep checked in for now so the build is reproducible)
+# *.mp3
+# *.wav
+# *.flac
+# *.aac
+
+# Generated output
+hp_montage.mp4
