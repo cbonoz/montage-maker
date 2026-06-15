@@ -17,28 +17,33 @@ A collection of montages from the James Bond film Quantum of Solace.
 **Output:** `output/qos_loyalty_montage_sb_snowfall.mp4`
 
 **Source clips used:**
-- `hook_ms_apartment.mp4` — M's apartment scene (sourced from YouTube)
+- `hook_i_never_left.mkv` — "Quantum of Solace - 'I never left.' (1080p)" from YouTube
 - `scenes_compilation.webm` — "Bond Goes Rogue: Best of Quantum of Solace Action" (607s)
 
 **Hook timing (found via find_dialogue.py):**
 ```
 "I need you back" → 64.2-69.7s
 "I never left"    → 66.3-69.7s
-Combined hook     → 64-70s
+Combined hook     → 64-70s (6s)
 ```
 
 **Build:**
 
 ```bash
-# Find hook timestamps
+# Step 1: Download the hook clip
+yt-dlp -f "bestvideo[height<=720]+bestaudio/best[height<=720]" \
+    -o "source/hook_i_never_left.%(ext)s" \
+    "https://www.youtube.com/watch?v=WFwmDq-MKaE"
+
+# Step 2: Find hook timestamps
 uv run find_dialogue.py \
     "https://www.youtube.com/watch?v=WFwmDq-MKaE" \
     "I need you back" --output hook
 
-# Build montage
+# Step 3: Build montage
 python build_montage.py \
     projects/quantum_of_solace/source/scenes_compilation.webm \
-    --hook-movie projects/quantum_of_solace/source/hook_ms_apartment.mp4 \
+    --hook-movie projects/quantum_of_solace/source/hook_i_never_left.mkv \
     --hook 64-70 --hook-dur 6 \
     --bpm 80 \
     --scenes \
