@@ -23,4 +23,5 @@ dead_poets_carpe_diem,Dead Poets Society,Carpe diem,📝 Planned,Passion; noncon
 pursuit_of_happyness_dont_let_somebody,The Pursuit of Happyness,Don't let somebody tell you,📝 Planned,Perseverance; fatherhood; american dream,FirstSnow,Moonlight,75,,Chris Gardner to his son; earned conviction
 rocky_get_hit,Rocky Balboa,It's not about how hard you hit,📝 Planned,Grit; perseverance; defying the odds,Moonlight,sb_snowfall,80,,Rocky to his son; universal life metaphor
 skyfall_loyalty,Skyfall,I need you back,📝 Planned,Defiance; loyalty; spy game dynamics,sb_snowfall,Penumbra,80,,M + Bond exchange; "I never left" twist; three words each
-gladiator_vengeance,Gladiator,I will have my vengeance,✅ Built,Vengeance; honor; gladiatorial epic,Moonlight,,75,output/gladiator_montage.mp4,Maximus removes helmet in Colosseum; built montage
+gladiator_vengeance,Gladiator,"I will have my vengeance, in this life or the next",✅ Built,Vengeance; honor; gladiatorial epic,Moonlight,,75,output/gladiator_montage.mp4,Full Maximus speech (helmet reveal); built
+gladiator_vengeance_short,Gladiator,"I will have my vengeance",✅ Built,Vengeance; honor; punchy cut,Moonlight,,75,output/gladiator_vengeance_montage.mp4,Short hook only; found via find_dialogue.py; built

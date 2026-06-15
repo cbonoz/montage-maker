@@ -122,6 +122,29 @@ file 'scenes_part2.webm'
 
 ---
 
+## Finding Dialogue Timestamps Automatically
+
+Use `find_dialogue.py` to locate exact hook timestamps in YouTube-sourced clips:
+
+```bash
+# Search for a line in a YouTube clip
+uv run find_dialogue.py "https://www.youtube.com/watch?v=OgU1QOkFFT0" "vengeance"
+
+# Output -> hook format for build_montage.py
+TIMING=$(uv run find_dialogue.py "https://youtu.be/..." "dialogue" --output hook)
+python build_montage.py movie.mp4 --hook "$TIMING" ...
+```
+
+**How it works:** Fetches YouTube's existing captions (auto-generated or manual) via `youtube-transcript-api`, then searches for the dialogue text. Transcripts are cached locally in `transcripts/` for reuse.
+
+**Limitations:**
+- Only works for YouTube videos that have captions enabled
+- Auto-generated captions may mangle words (e.g., "vengeance" → "venyards")
+- Use broader search terms or adjacent text when exact phrases fail
+- Verify the returned segment by checking adjacent segments for context
+
+---
+
 ## Common Pitfalls & Solutions
 
 ### Pitfall: "Hook dialogue and music clash"
