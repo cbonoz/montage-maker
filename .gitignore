@@ -5,11 +5,12 @@
 *.mov
 *.avi
 
-# Audio source files (keep checked in for now so the build is reproducible)
+# Keep sounds checked in (CC BY 4.0, small, needed for builds)
 # *.mp3
-# *.wav
-# *.flac
-# *.aac
 
-# Generated output
-hp_montage.mp4
+# Generated output per project
+projects/*/output/
+
+# Python cache
+__pycache__/
+*.pyc
