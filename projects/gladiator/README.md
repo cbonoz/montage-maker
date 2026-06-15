@@ -58,19 +58,18 @@ python build_montage.py \
 **Built using:**
 
 ```bash
-# Find the hook timing automatically from the scenes compilation transcript
-# (search broader term first, then narrow — "vengeance" may be mangled by auto-captions)
+# Find the hook timing from the scenes compilation transcript
 uv run find_dialogue.py \
     "https://www.youtube.com/watch?v=OgU1QOkFFT0" \
     "will have my" \
     --output hook
 # → 300.0-307.3 (contains "wife, and I will have my vengeance in this life or the next")
-# Narrow to just the punchline: 302-307
+# Start at 300.5 to drop "wife, and" preamble but keep "I will have my"
 
-# Build with precise timestamps
+# Build
 python build_montage.py \
     projects/gladiator/source/scenes_compilation.mp4 \
-    --hook 302-307 --hook-dur 5 \
+    --hook 300.5-306.5 --hook-dur 6 \
     --bpm 75 \
     --scenes 32-36 40-44 52-56 72-76 \
             120-124 130-134 140-144 160-164 \

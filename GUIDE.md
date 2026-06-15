@@ -41,24 +41,82 @@ For a **30-second montage**, aim for:
 
 Example: At 80 BPM, a 4-beat measure = 3 seconds. Cut scenes to land at 0s, 3s, 6s, 9s, etc.
 
+### Automatic Beat Alignment
+
+`build_montage.py` now **detects actual transient peaks** in the music (kick drums, snare hits, sharp chord changes) and snaps each scene boundary to the nearest detected downbeat. This means:
+
+- Each scene cut lands on an **actual musical event**, not just an arithmetic position
+- **Variable scene durations** create natural rhythmic variation instead of robotic uniformity
+- Works best with percussive music (sb_snowfall, Penumbra)
+- Ambient music (Moonlight, Meanwhile) gracefully falls back to fixed durations
+
+```
+# Scene boundaries before (fixed, may drift from beats):
+[0.5s black] [6.4s hook] [1.60s] [1.60s] [1.60s] ...
+
+# Scene boundaries after (snapped to actual music transients):
+[0.5s black] [6.4s hook] [1.58s] [1.63s] [1.58s] ...
+                              ^ each boundary snaps to nearest detected beat
+```
+
 ---
 
 ## Music + Hook Dialogue Synchronization
 
 ### Audio Envelope Strategy
 
-**Hook placement** sets the emotional tone:
+**Hook placement** sets the emotional tone (automated by `build_montage.py`):
 
-- **0–0.5s**: Let the music intro breathe (no dialogue, establish the vibe)
-- **0.5–2s**: Hook dialogue starts (dialogue peaks audio, visuals fade in)
-- **2–3s**: Hook dialogue ends, music swells back (transition)
-- **3–30s**: Scene montage begins (dialogue gone, music + visuals dominate)
+| Time range | Video | Audio |
+|------------|-------|-------|
+| **0–0.5s** | Black lead-in | Silence |
+| **0.5s–hook_end** | Hook dialogue clip | Dialogue full volume + music at 20% (present but low) |
+| **hook_end** (the drop) | First scene cut begins | Music instantly jumps to 100% — the "drop" moment |
+| **hook_end–last 3s** | Scene montage | Music full volume |
+| **Last 3s** | Final scenes | Music fades out |
+
+### Music Drop Timing
+
+The most dramatic improvement to post-dialogue editing is the **music drop**:
+
+- During the hook, music stays at **20% volume** — audible but not competing with dialogue
+- At the **instant the hook ends** (first scene cut), music jumps to **100% within 0.15s**
+- This creates a deliberate **release moment** — the dialogue finishes, the music "hits," and the visual montage begins with full energy
+
+Compare:
+```
+Before: music_fade gradually over 1.5s → music at 100%
+        (blurry transition, no impact moment)
+
+After:  music at 20% during hook → instant jump to 100%
+        (sharp drop, scene cut hits harder)
+```
 
 ### Fade Timing
 
-- **Dialogue fade-out**: 0.5s linear fade at the end of hook (dialogue volume 100% → 0%)
-- **Music fade-in**: 1.5s crossfade from -20dB to 0dB during hook (music underneath dialogue, rises after)
+- **Dialogue fade-out**: instantaneous at hook end (dialogue stops, music takes over)
+- **Music drop**: 0.15s ramp from 20% → 100% at hook end (the "drop")
 - **Scene audio**: Mute original scene audio entirely (use only music + hook dialogue)
+
+### Crossfade Transitions
+
+Use `--transition crossfade` to enable smooth dissolves between scenes instead of hard cuts:
+
+```bash
+python build_montage.py movie.mp4 \
+    --hook 1:30-1:35 \
+    --scenes 5:10-5:14 12:20-12:24 25:00-25:04 \
+    --song sounds/sb_snowfall.mp3 --bpm 80 \
+    --transition crossfade \
+    --output montage.mp4
+```
+
+- Crossfade duration = half a beat (0.4s at 80 BPM)
+- Black → hook is always a hard cut (cinematic lead-in)
+- Hook → scenes use crossfade for smooth visual flow
+- Best for: emotional/melancholic montages where hard cuts feel too jarring
+- Best for: music with clear dynamic shifts where dissolves match the ebb and flow
+- Falls back to hard cuts automatically if ffmpeg's xfade filter fails
 
 ### When to Mute
 
