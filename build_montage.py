@@ -425,7 +425,7 @@ def build(args):
 
     hook_start = BLACK_DUR
     hook_end = hook_start + hook_actual
-    transition_dur = 0.5  # smooth ramp from music bed to full after dialogue
+    transition_dur = 1.5  # smooth ramp from music bed to full after dialogue
     fade_out_dur = min(3.0, vid_dur * 0.12)
 
     # These will be set during mixing, init to safe defaults for reporting
@@ -437,11 +437,16 @@ def build(args):
         song_path = Path(args.song)
         final_audio = work / "mixed_audio.aac"
 
-        # Extract hook dialogue with high-pass filter to reduce non-dialogue rumble
+        # Extract hook dialogue: isolate center channel + clean non-dialogue audio
+        # Film dialogue is typically center-panned; music/SFX are wider.
+        # Summing L+R extracts center (dialogue), then clean up with noise reduction.
         hook_audio = work / "hook_audio.aac"
         subprocess.run([
             "ffmpeg", "-y", "-i", str(hook_path), "-vn",
-            "-af", "highpass=f=100",
+            "-af",
+            "pan=mono|c0=FL+FR,"
+            "highpass=f=80,lowpass=f=8000,"
+            "afftdn=nr=12:nf=-25",
             "-c:a", "aac", str(hook_audio)
         ], capture_output=True, check=True)
 
@@ -481,17 +486,18 @@ def build(args):
 
         # Mix dialogue + music
         # Music: silent during black, 5% bed during hook, smooth ramp to
-        # full after dialogue ends, fade out at end.
-        # Dialogue: high-passed + boosted to cut through.
+        # full starting just before hook ends (overlaps final dialogue).
+        # Dialogue: center-channel extracted + noise reduced + boosted.
         music_bed = 0.05  # barely audible during hook
-        ramp_end = hook_end + transition_dur
+        ramp_start = hook_end - 0.3  # start ramp before dialogue ends (overlap)
+        ramp_end = ramp_start + transition_dur
         filter_str = (
             f"[0:a]adelay=0|0[d];"
             f"[1:a]adelay=0|0,"
             f"volume="
             f"'if(lte(t,{hook_start}),0,"
-            f"if(lt(t,{hook_end}),{music_bed},"
-            f"if(lt(t,{ramp_end}),{music_bed}+(t-{hook_end})/{transition_dur}*{1-music_bed},1)))':eval=frame,"
+            f"if(lt(t,{ramp_start}),{music_bed},"
+            f"if(lt(t,{ramp_end}),{music_bed}+(t-{ramp_start})/{transition_dur}*{1-music_bed},1)))':eval=frame,"
             f"afade=t=out:st={vid_dur-fade_out_dur}:d={fade_out_dur}[m];"
             f"[d]volume={dialogue_boost}[d_boosted];"
             f"[d_boosted][m]amix=inputs=2:duration=longest:dropout_transition=0,"
