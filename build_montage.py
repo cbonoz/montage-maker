@@ -238,10 +238,11 @@ def detect_song_onset(song_path: str) -> float:
 
 
 def scale_pad_filter(target_w=1280, target_h=720):
-    """Return an ffmpeg filter string to scale + pad to exact target resolution."""
+    """Return an ffmpeg filter string to scale + pad to exact target resolution, with square pixels."""
     return (
         f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,"
-        f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:black"
+        f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:black,"
+        f"setsar=1"
     )
 
 
@@ -253,7 +254,8 @@ def extract_video_only(movie, start, end, out):
         "-ss", str(start), "-i", str(movie),
         "-t", str(dur),
         "-filter_complex", f"[0:v]{scale_pad_filter()}",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+        "-r", "30",
         "-an",
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
@@ -270,7 +272,8 @@ def extract_with_audio(movie, start, end, out):
         "-ss", str(start), "-i", str(movie),
         "-t", str(dur),
         "-filter_complex", f"[0:v]{scale_pad_filter()}",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+        "-r", "30",
         "-c:a", "aac",
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
@@ -323,111 +326,7 @@ def build(args):
     hook_path = work / "hook.mp4"
     hook_actual = extract_with_audio(str(hook_movie), hs, hs + raw_hook_dur, hook_path)
 
-    # --- Step 1b: overlay dramatic subtitle on hook if --hook-text provided ---
-    if args.hook_text and hook_path.exists():
-        subtitled = work / "hook_subtitled.mp4"
-        dt_font = "fontfile=/System/Library/Fonts/HelveticaNeue.ttc:fontsize=32:fontcolor=white:"
-        dt_style = "box=1:boxcolor=black@0.5:boxborderw=12:x=(w-text_w)/2:y=h-text_h-40:"
-        dt_style += "shadowx=2:shadowy=2:shadowcolor=black@0.6"
-
-        # Try JSON (explicit timed entries)
-        try:
-            entries = json.loads(args.hook_text)
-            if isinstance(entries, list):
-                dt_parts = []
-                for ent in entries:
-                    text = ent["text"].replace("'", "'\\\\\\''").replace('"', '\\"')
-                    rel_start = max(0.0, ent.get("start", 0) - hs)
-                    rel_end = min(hook_actual, ent.get("end", hook_actual) - hs)
-                    if rel_end <= rel_start:
-                        continue
-                    dt_parts.append(
-                        f"drawtext=text='{text}':{dt_font}{dt_style}:enable='between(t\\,{rel_start:.1f}\\,{rel_end:.1f})'"
-                    )
-                if dt_parts:
-                    filter_str = ",".join(dt_parts)
-                    print(f"   Subtitles: {len(entries)} timed entries")
-                else:
-                    raise ValueError("Empty")
-            else:
-                raise ValueError("Not list")
-        except (json.JSONDecodeError, TypeError, ValueError, KeyError):
-            # Not JSON — if text has |, try auto-timing from cached transcripts
-            if "|" in args.hook_text:
-                lines = [l.strip() for l in args.hook_text.split("|") if l.strip()]
-                dt_parts = []
-                # Scan all cached transcripts for each line
-                trans_dir = Path(__file__).resolve().parent / "transcripts"
-                for tf in sorted(trans_dir.glob("*.json")):
-                    try:
-                        with open(tf) as f:
-                            segs = json.load(f)
-                    except Exception:
-                        continue
-                    # Try to match each line in this transcript
-                    matched = []
-                    for line in lines:
-                        q = line.lower().rstrip(".,!?!")
-                        for s in segs:
-                            if q in s["text"].lower():
-                                matched.append({"text": line, "start": s["start"], "end": s["start"] + s["duration"]})
-                                break
-                    if len(matched) == len(lines):
-                        # All lines found in this transcript — sort by start, trim overlaps
-                        matched.sort(key=lambda x: x["start"])
-                        prev_end = 0
-                        for i, m in enumerate(matched):
-                            rel_start = max(0.0, m["start"] - hs, prev_end)
-                            rel_end = min(hook_actual, m["end"] - hs)
-                            if i < len(matched) - 1:
-                                rel_end = min(rel_end, max(0.0, matched[i+1]["start"] - hs))
-                            if rel_end > rel_start + 0.3:
-                                text = m["text"].replace("'", "'\\\\\\''").replace('"', '\\"')
-                                dt_parts.append(
-                                    f"drawtext=text='{text}':{dt_font}{dt_style}:enable='between(t\\,{rel_start:.1f}\\,{rel_end:.1f})'"
-                                )
-                                prev_end = rel_end
-                        if dt_parts:
-                            break
-
-                if dt_parts:
-                    filter_str = ",".join(dt_parts)
-                    n_auto = len(dt_parts)
-                    print(f"   Subtitles: {n_auto} auto-timed from transcript")
-                else:
-                    # Fallback: single subtitle full duration
-                    text_escaped = args.hook_text.replace("'", "'\\\\\\''").replace('"', '\\"')
-                    filter_str = (
-                        f"drawtext=text='{text_escaped}':{dt_font}{dt_style},"
-                        f"fade=t=in:st=0:d=0.3,fade=t=out:st={hook_actual-0.5}:d=0.5"
-                    )
-                    print(f"   Subtitle: \"{args.hook_text}\" (full duration)")
-            else:
-                # Plain string — single subtitle for full hook duration
-                text_escaped = args.hook_text.replace("'", "'\\\\\\''").replace('"', '\\"')
-                filter_str = (
-                    f"drawtext=text='{text_escaped}':{dt_font}{dt_style},"
-                    f"fade=t=in:st=0:d=0.3,fade=t=out:st={hook_actual-0.5}:d=0.5"
-                )
-                print(f"   Subtitle: \"{args.hook_text}\"")
-
-        subprocess.run([
-            "ffmpeg", "-y", "-i", str(hook_path),
-            "-vf", filter_str,
-            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-            "-c:a", "copy",
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
-            str(subtitled)
-        ], capture_output=True, check=True, timeout=60)
-        dur = probe_dur(subtitled)
-        if dur > 0:
-            hook_path = subtitled
-        else:
-            print(f"   ⚠️ Subtitle overlay failed, using raw hook")
-        # (end subtitle block)
-            print(f"   ⚠️ Subtitle overlay failed, using raw hook")
-
+    
     # Snap hook duration to nearest beat
     hook_actual = max(beat_sec, round(hook_actual / beat_sec) * beat_sec)
 
@@ -520,8 +419,8 @@ def build(args):
     black_path = work / "black.mp4"
     subprocess.run([
         "ffmpeg", "-y",
-        "-f", "lavfi", "-i", f"color=c=black:s=1280x720:d={BLACK_DUR}",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-f", "lavfi", "-i", f"color=c=black:s=1280x720:r=30:d={BLACK_DUR}",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
         "-pix_fmt", "yuv420p",
         "-t", str(BLACK_DUR),
         str(black_path)
@@ -530,8 +429,8 @@ def build(args):
     buffer_path = work / "buffer.mp4"
     subprocess.run([
         "ffmpeg", "-y",
-        "-f", "lavfi", "-i", f"color=c=black:s=1280x720:d={POST_HOOK_BUFFER}",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-f", "lavfi", "-i", f"color=c=black:s=1280x720:r=30:d={POST_HOOK_BUFFER}",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
         "-pix_fmt", "yuv420p",
         "-t", str(POST_HOOK_BUFFER),
         str(buffer_path)
@@ -558,14 +457,14 @@ def build(args):
             )
             scene_label = f"[{next_label}]"
         filter_str = ";".join(parts)
-        concat_filter = f"[0:v]{scene_label}concat=n=2:v=1:a=0[outv]"
+        concat_filter = f"[0:v]{scene_label}concat=n=2:v=1:a=0[outv];[outv]setsar=1[final]"
         full_filter = filter_str + ";" + concat_filter if filter_str else concat_filter
         try:
             subprocess.run([
                 "ffmpeg", "-y"] + inputs + [
                 "-filter_complex", full_filter,
-                "-map", "[outv]",
-                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-map", "[final]",
+                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
                 "-pix_fmt", "yuv420p",
                 "-movflags", "+faststart",
                 str(raw_vid)
@@ -582,12 +481,12 @@ def build(args):
         for i, p in enumerate(all_clips):
             inputs.extend(["-i", str(p)])
             labels.append(f"[{i}:v]")
-        filter_str = "".join(labels) + f"concat=n={len(all_clips)}:v=1:a=0[outv]"
+        filter_str = "".join(labels) + f"concat=n={len(all_clips)}:v=1:a=0[outv];[outv]setsar=1[final]"
         subprocess.run([
             "ffmpeg", "-y"] + inputs + [
             "-filter_complex", filter_str,
-            "-map", "[outv]",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            "-map", "[final]",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
             "-pix_fmt", "yuv420p",
             "-movflags", "+faststart",
             str(raw_vid)
@@ -745,7 +644,7 @@ def build(args):
             "-i", str(raw_vid), "-i", str(trimmed_audio),
             "-filter_complex", f"[0:v]{grade_filter}[v]",
             "-map", "[v]", "-map", "1:a:0",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
             "-c:a", "aac", "-b:a", "192k",
             "-pix_fmt", "yuv420p",
             "-shortest",
@@ -806,9 +705,6 @@ def main():
                        help=f"Max hook duration (default: {HOOK_DUR}s)")
     p.add_argument("--transition", choices=["cut", "crossfade"], default="cut",
                        help="Scene transition style: cut or crossfade (default: cut)")
-    p.add_argument("--hook-text", default=None,
-                       help="Dramatic subtitle text. Use | to separate timed lines (auto-timed from cached transcripts). "
-                            "Or JSON array from find_dialogue.py for explicit timestamps.")
     p.add_argument("--color-grade", default=None,
                        help=f"Color grade preset: {', '.join(COLOR_GRADES.keys())}. "
                             "Or any ffmpeg filter string (e.g. 'eq=brightness=-0.1:contrast=1.5').")
