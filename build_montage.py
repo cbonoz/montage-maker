@@ -25,18 +25,11 @@ TARGET_DUR = 25.0
 SCENE_DUR = 2.0
 HOOK_DUR = 3.0
 BLACK_DUR = 0.5
-POST_HOOK_BUFFER = 0.4  # dramatic pause between hook dialogue end and first scene cut
+POST_HOOK_BUFFER = 2.0  # target seconds of silence after hook dialogue ends (actual buffer adjusts dynamically)
 MAX_SCENES = 20
 DIALOGUE_LOUDNESS_TARGET = -10.0  # target dB for dialogue after boosting (loud enough to hear over music)
 
-# Color grading presets for --color-grade
-COLOR_GRADES = {
-    "dark":     "eq=brightness=-0.03:contrast=1.15:saturation=0.85:gamma=0.95",
-    "dramatic": "eq=brightness=-0.05:contrast=1.3:saturation=0.65:gamma=0.9",
-    "cool":     "eq=saturation=0.8,colorchannelmixer=rr=0.85:rg=0.1:rb=0.05:gr=0.05:gg=0.9:gb=0.05:br=0.05:bg=0.1:bb=0.85",
-    "warm":     "eq=saturation=1.2,colorchannelmixer=rr=1.1:rg=0.0:rb=0.0:gr=0.0:gg=1.0:gb=0.0:br=0.0:bg=0.1:bb=0.9",
-    "vintage":  "eq=brightness=0.02:contrast=0.9:saturation=0.4,colorchannelmixer=rr=0.9:rg=0.1:rb=0.0:gr=0.1:gg=0.8:gb=0.1:br=0.05:bg=0.1:bb=0.85",
-}
+
 
 
 def parse_ts(ts: str) -> float:
@@ -114,6 +107,47 @@ def detect_bpm(song_path):
     return None
 
 
+def detect_last_audio_moment(video_path: str, min_energy_pct: float = 0.02) -> float:
+    """Find the last moment (seconds) where audio energy exceeds a silence threshold.
+
+    Analyzes the hook clip's audio to detect when the last spoken word fades out.
+    Returns the timestamp of the last 50ms window above threshold.
+    Useful for dynamically setting the post-hook buffer so dialogue breathes naturally.
+    """
+    try:
+        r = subprocess.run([
+            "ffmpeg", "-y", "-i", str(video_path),
+            "-ac", "1", "-ar", "16000", "-f", "wav", "pipe:1"
+        ], capture_output=True, timeout=15)
+        if r.returncode != 0 or len(r.stdout) < 1000:
+            return 0
+        samples = r.stdout[44:]
+        sr = 16000
+        window = sr // 40
+        hop = window // 2
+        last_energy = 0.0
+        max_energy = 0.0
+        times = []
+        for i in range(0, len(samples) - window, hop):
+            chunk = samples[i:i+window]
+            if len(chunk) < 2:
+                continue
+            vals = [abs(int.from_bytes(chunk[j:j+2], 'little', signed=True))
+                    for j in range(0, len(chunk)-1, 2)]
+            if not vals:
+                continue
+            e = sum(vals) / len(vals)
+            t = (i // 2) / sr  # i is byte offset, each sample = 2 bytes
+            times.append(t)
+            if e > max_energy:
+                max_energy = e
+            if e > max_energy * min_energy_pct:
+                last_energy = t
+        return last_energy + (window // 2) / sr  # end of last window
+    except Exception:
+        return 0
+
+
 def detect_beat_positions(song_path: str, max_dur: float = 30.0) -> list[float]:
     """Detect beat/transient positions in the first N seconds of audio.
 
@@ -148,13 +182,8 @@ def detect_beat_positions(song_path: str, max_dur: float = 30.0) -> list[float]:
         if not energy:
             return []
 
-        # Adaptive threshold: median + 1.5 × interquartile range
-        sorted_e = sorted(energy)
-        n = len(sorted_e)
-        q1 = sorted_e[n // 4]
-        q3 = sorted_e[3 * n // 4]
-        iqr = q3 - q1
-        threshold = sorted_e[n // 2] + 1.5 * iqr
+        # Adaptive threshold: 50% of max energy (works for dynamic orchestral tracks)
+        threshold = max(energy) * 0.5
 
         # Find local maxima above threshold
         peaks = []
@@ -295,7 +324,11 @@ def build(args):
         sys.exit(1)
 
     max_dur = args.max_dur or TARGET_DUR
-    hook_max = min(args.hook_dur or HOOK_DUR, max_dur * 0.3)
+    hs, he = parse_ts(args.hook.split("-")[0]), parse_ts(args.hook.split("-")[1])
+    if args.hook_dur:
+        hook_max = args.hook_dur
+    else:
+        hook_max = he - hs
 
     # --- BPM ---
     bpm = args.bpm
@@ -327,70 +360,74 @@ def build(args):
     hook_actual = extract_with_audio(str(hook_movie), hs, hs + raw_hook_dur, hook_path)
 
     
-    # Snap hook duration to nearest beat
-    hook_actual = max(beat_sec, round(hook_actual / beat_sec) * beat_sec)
+    # Hook duration stays exact — dialogue shouldn't snap to music beats
+    hook_actual = max(beat_sec, hook_actual)
 
-    # --- Step 2: budget scenes ---
-    remaining = avail - hook_actual - POST_HOOK_BUFFER
-    raw_scene_dur = args.scene_dur or SCENE_DUR
-    beat_scene_dur = max(beat_sec, round(raw_scene_dur / beat_sec) * beat_sec)
-    beat_scene_dur = max(beat_sec * 2, min(beat_sec * 8, beat_scene_dur))
+    # --- Dynamic post-hook buffer: find the actual end of speech ---
+    last_audio = detect_last_audio_moment(hook_path)
+    natural_silence = hook_actual - last_audio
+    actual_buffer = max(0.3, POST_HOOK_BUFFER - natural_silence)
+    if natural_silence > 0 and natural_silence < POST_HOOK_BUFFER * 2:
+        print(f"   Hook audio ends at {fmt(last_audio)}s → {fmt(natural_silence)}s trailing silence, buffer: {fmt(actual_buffer)}s")
+    else:
+        actual_buffer = POST_HOOK_BUFFER
 
-    n_scenes = min(len(args.scenes), MAX_SCENES, max(1, int(remaining // beat_scene_dur)))
-    actual_scene_dur = max(beat_sec * 2, round((remaining / n_scenes) / beat_sec) * beat_sec)
-    n_scenes = min(len(args.scenes), MAX_SCENES, max(1, int(remaining // actual_scene_dur)))
-
-    print(f"📐 {fmt(max_dur)}s total → {fmt(BLACK_DUR)}s black + {fmt(hook_actual)} hook + {fmt(POST_HOOK_BUFFER)}s buffer + {n_scenes}x{fmt(actual_scene_dur)}s scenes")
-    print(f"   (beat: {beat_sec:.2f}s, {int(actual_scene_dur/beat_sec)} beats per scene)")
-
-    # --- Beat alignment: snap scene boundaries to actual music downbeats ---
+    # --- Step 2: detect music transients for dynamic scene alignment ---
     beat_positions = []
+    raw_scene_dur = args.scene_dur or SCENE_DUR
     if args.song and Path(args.song).exists():
         beat_positions = detect_beat_positions(args.song, max_dur)
         if beat_positions:
             print(f"   Beat grid: {len(beat_positions)} transients detected in first {min(30.0, max_dur)}s")
 
-    # Compute per-scene cut times, each snapped to nearest detectable beat
+    # --- Step 3: place scene cuts at actual musical events ---
+    scene_start = BLACK_DUR + hook_actual + actual_buffer
     scene_cut_times = []
-    current = BLACK_DUR + hook_actual + POST_HOOK_BUFFER
-    for i in range(n_scenes):
-        target = current + actual_scene_dur
-        nearest = target
-        if beat_positions:
-            window = beat_sec * 1.5  # search within ±1.5 beats
-            candidates = [b for b in beat_positions
-                          if abs(b - target) <= window and b > current]
-            if candidates:
-                nearest = min(candidates, key=lambda b: abs(b - target))
-        scene_cut_times.append(nearest)
-        current = nearest
+    n_scenes = 0
 
-    # Cap to max_dur: drop last scene if total overshoots
-    if scene_cut_times and scene_cut_times[-1] > max_dur:
-        n_scenes -= 1
-        scene_cut_times = scene_cut_times[:n_scenes]
-        scene_cut_times.append(BLACK_DUR + hook_actual + actual_scene_dur * n_scenes)
-        # Re-snap
-        current = BLACK_DUR + hook_actual
-        for i in range(n_scenes):
-            target = current + actual_scene_dur
-            nearest = target
-            if beat_positions:
-                window = beat_sec * 1.0
-                candidates = [b for b in beat_positions
-                              if abs(b - target) <= window and b > current]
-                if candidates:
-                    nearest = min(candidates, key=lambda b: abs(b - target))
-            scene_cut_times[i] = nearest
-            current = nearest
+    if beat_positions and len(beat_positions) >= 4:
+        min_gap = max(beat_sec * 2, raw_scene_dur * 0.5)
+        max_gap = min(beat_sec * 6, raw_scene_dur * 2)
+        target_gap = raw_scene_dur
 
-    # Report alignment
-    if beat_positions:
-        on_beat = 0
-        for ct in scene_cut_times:
-            if any(abs(ct - b) < beat_sec * 0.3 for b in beat_positions):
-                on_beat += 1
-        print(f"   Beat-aligned: {on_beat}/{n_scenes} cuts on detected downbeats")
+        avail_beats = [b for b in beat_positions if b > scene_start]
+        current = scene_start
+        for b in avail_beats:
+            gap = b - current
+            if min_gap <= gap <= max_gap:
+                scene_cut_times.append(b)
+                current = b
+                n_scenes += 1
+            elif gap > max_gap and n_scenes > 0:
+                scene_cut_times.append(b)
+                current = b
+                n_scenes += 1
+            if n_scenes >= MAX_SCENES or (scene_cut_times and scene_cut_times[-1] >= max_dur - 3.0):
+                break
+    else:
+        remaining = avail - hook_actual - actual_buffer
+        beat_scene_dur = max(beat_sec * 2, round(raw_scene_dur / beat_sec) * beat_sec)
+        beat_scene_dur = max(beat_sec * 2, min(beat_sec * 8, beat_scene_dur))
+        n_scenes = min(len(args.scenes), MAX_SCENES, max(1, int(remaining // beat_scene_dur)))
+        actual_scene_dur = max(beat_sec * 2, round((remaining / n_scenes) / beat_sec) * beat_sec)
+        n_scenes = min(len(args.scenes), MAX_SCENES, max(1, int(remaining // actual_scene_dur)))
+        current = scene_start
+        for _ in range(n_scenes):
+            current += actual_scene_dur
+            scene_cut_times.append(current)
+
+    n_scenes = min(n_scenes, len(args.scenes))
+    scene_cut_times = scene_cut_times[:n_scenes]
+    scene_cut_times.append(max_dur - 3.0)
+
+    if beat_positions and n_scenes > 0:
+        actual_durs = [scene_cut_times[i] - scene_cut_times[i-1] for i in range(1, len(scene_cut_times))]
+        avg_dur = sum(actual_durs) / len(actual_durs) if actual_durs else 0
+        print(f"📐 {fmt(max_dur)}s total → {fmt(BLACK_DUR)}s black + {fmt(hook_actual)} hook + {fmt(actual_buffer)}s buffer + {n_scenes} scenes")
+        print(f"   (beat: {beat_sec:.2f}s, scene range: {fmt(min_gap)}–{fmt(max_gap)}s, avg: {fmt(avg_dur)}s, transient-aligned)")
+    elif n_scenes > 0:
+        print(f"📐 {fmt(max_dur)}s total → {fmt(BLACK_DUR)}s black + {fmt(hook_actual)} hook + {fmt(actual_buffer)}s buffer + {n_scenes}x{fmt(actual_scene_dur)}s scenes")
+        print(f"   (beat: {beat_sec:.2f}s, {int(actual_scene_dur/beat_sec)} beats per scene)")
 
     # --- Step 3: extract scenes (video-only) with variable beat-aligned durations ---
     scene_paths = []
@@ -399,14 +436,12 @@ def build(args):
         raw_dur = se - ss
         if scene_cut_times:
             if i == 0:
-                clip_dur = scene_cut_times[i] - (BLACK_DUR + hook_actual + POST_HOOK_BUFFER)
+                clip_dur = scene_cut_times[i] - (BLACK_DUR + hook_actual + actual_buffer)
             else:
                 clip_dur = scene_cut_times[i] - scene_cut_times[i - 1]
             clip_dur = min(raw_dur, max(beat_sec * 1.5, clip_dur))
         else:
-            clip_dur = min(raw_dur, actual_scene_dur)
-        mid = (ss + se) / 2
-        clip_start = mid - clip_dur / 2
+            clip_dur = min(raw_dur, raw_scene_dur)
         mid = (ss + se) / 2
         clip_start = mid - clip_dur / 2
         source_movie = movies[i % len(movies)]
@@ -429,10 +464,10 @@ def build(args):
     buffer_path = work / "buffer.mp4"
     subprocess.run([
         "ffmpeg", "-y",
-        "-f", "lavfi", "-i", f"color=c=black:s=1280x720:r=30:d={POST_HOOK_BUFFER}",
+        "-f", "lavfi", "-i", f"color=c=black:s=1280x720:r=30:d={actual_buffer}",
         "-c:v", "libx264", "-preset", "fast", "-crf", "18",
         "-pix_fmt", "yuv420p",
-        "-t", str(POST_HOOK_BUFFER),
+        "-t", str(actual_buffer),
         str(buffer_path)
     ], capture_output=True, check=True, timeout=30)
     # --- Step 5: concat video ---
@@ -450,14 +485,14 @@ def build(args):
             inputs.extend(["-i", str(p)])
         parts = []
         for i in range(3, len(all_clips)):
-            offset = sum(durs[1:i]) - xfade_dur * (i - 1)
+            offset = durs[2] + sum(durs[3:i]) - (i - 2) * xfade_dur
             next_label = f"x{i}"
             parts.append(
                 f"{scene_label}[{i}:v]xfade=transition=fade:duration={xfade_dur}:offset={offset:.3f}[{next_label}]"
             )
             scene_label = f"[{next_label}]"
         filter_str = ";".join(parts)
-        concat_filter = f"[0:v]{scene_label}concat=n=2:v=1:a=0[outv];[outv]setsar=1[final]"
+        concat_filter = f"[0:v][1:v]{scene_label}concat=n=3:v=1:a=0[outv];[outv]setsar=1[final]"
         full_filter = filter_str + ";" + concat_filter if filter_str else concat_filter
         try:
             subprocess.run([
@@ -634,34 +669,16 @@ def build(args):
     ], capture_output=True, check=True)
 
     print("\n🎬 Muxing final video...")
-    grade_filter = None
-    if args.color_grade:
-        grade_filter = COLOR_GRADES.get(args.color_grade, args.color_grade)
-        print(f"   Color grade: {args.color_grade}")
-    if grade_filter:
-        subprocess.run([
-            "ffmpeg", "-y",
-            "-i", str(raw_vid), "-i", str(trimmed_audio),
-            "-filter_complex", f"[0:v]{grade_filter}[v]",
-            "-map", "[v]", "-map", "1:a:0",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-            "-c:a", "aac", "-b:a", "192k",
-            "-pix_fmt", "yuv420p",
-            "-shortest",
-            "-movflags", "+faststart",
-            str(out)
-        ], capture_output=True, check=True)
-    else:
-        subprocess.run([
-            "ffmpeg", "-y",
-            "-i", str(raw_vid), "-i", str(trimmed_audio),
-            "-c:v", "copy",
-            "-map", "0:v:0", "-map", "1:a:0",
-            "-c:a", "aac", "-b:a", "192k",
-            "-shortest",
-            "-movflags", "+faststart",
-            str(out)
-        ], capture_output=True, check=True)
+    subprocess.run([
+        "ffmpeg", "-y",
+        "-i", str(raw_vid), "-i", str(trimmed_audio),
+        "-c:v", "copy",
+        "-map", "0:v:0", "-map", "1:a:0",
+        "-c:a", "aac", "-b:a", "192k",
+        "-shortest",
+        "-movflags", "+faststart",
+        str(out)
+    ], capture_output=True, check=True)
 
     # --- Step 8: cleanup ---
     actual_dur = probe_dur(out)
@@ -669,7 +686,9 @@ def build(args):
     print(f"\n✅ -> {out}")
     print(f"   Duration: {fmt(actual_dur)} (max: {fmt(max_dur)})")
     print(f"   Size: {size_mb:.1f} MB")
-    print(f"   BPM: {bpm} | Beat: {beat_sec:.2f}s | Scene dur: {fmt(actual_scene_dur)} ({int(actual_scene_dur/beat_sec)} beats)")
+    scene_durs = [scene_cut_times[i] - scene_cut_times[i-1] for i in range(1, len(scene_cut_times)) if scene_cut_times]
+    avg_scene_dur = sum(scene_durs) / len(scene_durs) if scene_durs else 0
+    print(f"   BPM: {bpm} | Beat: {beat_sec:.2f}s | Avg scene: {fmt(avg_scene_dur)}s ({int(avg_scene_dur/beat_sec + 0.5)} beats)")
     print(f"   Audio: {fmt(BLACK_DUR)}s silence -> {fmt(hook_actual)}s dialogue+low music -> {(actual_dur - hook_end):.1f}s music full")
     if beat_positions:
         print(f"   Beat-aligned: scenes snapped to {len(beat_positions)} detected transients")
@@ -701,13 +720,10 @@ def main():
                    help=f"Max duration (default: {TARGET_DUR}s)")
     p.add_argument("--scene-dur", type=float, default=SCENE_DUR,
                    help=f"Per-scene duration (default: {SCENE_DUR}s)")
-    p.add_argument("--hook-dur", type=float, default=HOOK_DUR,
-                       help=f"Max hook duration (default: {HOOK_DUR}s)")
+    p.add_argument("--hook-dur", type=float, default=None,
+                       help=f"Hook duration in seconds (default: from hook range, capped at 30%% of max-dur)")
     p.add_argument("--transition", choices=["cut", "crossfade"], default="cut",
                        help="Scene transition style: cut or crossfade (default: cut)")
-    p.add_argument("--color-grade", default=None,
-                       help=f"Color grade preset: {', '.join(COLOR_GRADES.keys())}. "
-                            "Or any ffmpeg filter string (e.g. 'eq=brightness=-0.1:contrast=1.5').")
     p.add_argument("--keep", action="store_true", help="Keep temp files")
 
     ok = build(p.parse_args())

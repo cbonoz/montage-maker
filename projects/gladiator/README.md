@@ -79,6 +79,44 @@ python build_montage.py \
     --output projects/gladiator/output/gladiator_vengeance_montage.mp4
 ```
 
+---
+
+### 3. gladiator_entertained — "Are you not entertained?"
+
+**Status:** ✅ Built
+
+**Hook:** "Are you not entertained?"
+
+**Music:** Legacy @ 100 BPM (bold brass, soaring strings, heroic)
+
+**Output:** `output/gladiator_entertained_montage_Legacy.mp4`
+
+**Source clips used:**
+- `mc_are_you_entertained.mp4` — "Are you not entertained?" scene (135s, 720p)
+- `scenes_compilation.mp4` — Gladiator best scenes compilation (860s)
+- `mc_germania.mp4` — Germania battle scenes (191s)
+
+**Hook timing:** 90-96s in `mc_are_you_entertained.mp4` (found via Whisper)
+
+**Build:**
+
+```bash
+python build_montage.py \
+    projects/gladiator/source/scenes_compilation.mp4 \
+    projects/gladiator/source/mc_germania.mp4 \
+    --hook-movie projects/gladiator/source/mc_are_you_entertained.mp4 \
+    --hook 90-96 --hook-dur 6 \
+    --bpm 100 \
+    --scenes \
+        10-13 30-33 50-53 70-73 90-93 110-113 \
+        130-133 150-153 170-173 190-193 210-213 30-33 \
+        250-253 50-53 \
+    --song sounds/Legacy.mp3 \
+    --max-dur 35 --scene-dur 1.8 \
+    --transition crossfade \
+    --output projects/gladiator/output/gladiator_entertained_montage_Legacy.mp4
+```
+
 ## Notes
 
 - Both montages use the same scene clips with the same beat-sync (75 BPM, 3 beats per scene)

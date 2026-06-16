@@ -12,61 +12,38 @@ A collection of montages from the James Bond film Quantum of Solace, focusing on
 > **M:** "I need you back."
 > **Bond:** "I never left."
 
-**Music:** Penumbra @ 70 BPM (dark, longing, glacial)
-**Alt Music:** sb_snowfall @ 80 BPM
+**Music:** The Long Dark @ 75 BPM (ambient neoclassical piano — Scott Buckley)
 
-**Outputs:**
-- `output/qos_loyalty_montage_Penumbra.mp4` (recommended — dark/moody)
-- `output/qos_loyalty_montage_sb_snowfall.mp4` (cinematic/wintery)
+**Output:** `output/qos_loyalty_montage_TheLongDark.mp4`
 
 **Source clips used:**
-- `hook_i_never_left.mkv` — "Quantum of Solace - 'I never left.' (1080p)" from YouTube
-- `scenes_compilation.webm` — QUANTUM OF SOLACE CLIP COMPILATION #2 (347s) — general scenes compilation
-
-**Hook timing (found via find_dialogue.py):**
-```
-"I need you back" → 64.2-69.7s
-"I never left"    → 66.3-69.7s
-Combined hook     → 64-70s (6s)
-```
+- `hook_i_never_left.mkv` — "Quantum of Solace - 'I never left.' (1080p)" from YouTube (hook at 64-68s)
+- `scenes_betrayed.mp4` — "Betrayed Within - Quantum of Solace" (363s) — introspective, dark character scenes
 
 **Build:**
 
 ```bash
-# Step 1: Download the hook clip
-yt-dlp -f "bestvideo[height<=720]+bestaudio/best[height<=720]" \
-    -o "projects/quantum_of_solace/source/hook_i_never_left.%(ext)s" \
-    "https://www.youtube.com/watch?v=WFwmDq-MKaE"
+# Download music
+yt-dlp -x --audio-format mp3 -o "sounds/TheLongDark.%(ext)s" \
+    "https://www.youtube.com/watch?v=8i_6R2zr9H8"
 
-# Step 2: Download the scenes compilation
-yt-dlp -f "bestvideo[height<=720]+bestaudio/best[height<=720]" \
-    -o "projects/quantum_of_solace/source/scenes_compilation.%(ext)s" \
-    "https://www.youtube.com/watch?v=c_7A_mw2eCE"
-
-# Step 3: Find hook timestamps
-uv run find_dialogue.py \
-    "https://www.youtube.com/watch?v=WFwmDq-MKaE" \
-    "I need you back" --output hook
-
-# Step 4: Build montage (dark/moody version)
+# Build montage
 python build_montage.py \
-    projects/quantum_of_solace/source/scenes_compilation.webm \
+    projects/quantum_of_solace/source/scenes_betrayed.mp4 \
     --hook-movie projects/quantum_of_solace/source/hook_i_never_left.mkv \
-    --hook 64-70 --hook-dur 6 \
-    --bpm 70 \
+    --hook 64-68 \
+    --bpm 75 \
     --scenes \
-        10-13 40-43 70-73 100-103 130-133 160-163 \
-        190-193 220-223 250-253 280-283 310-313 340-343 \
-    --song sounds/Penumbra.mp3 \
+        5-7 30-33 55-58 80-83 105-108 130-133 \
+        155-158 180-183 205-208 230-233 255-258 280-283 \
+    --song sounds/TheLongDark.mp3 \
     --max-dur 30 --scene-dur 1.5 \
-    --output projects/quantum_of_solace/output/qos_loyalty_montage_Penumbra.mp4
+    --transition crossfade \
+    --output projects/quantum_of_solace/output/qos_loyalty_montage_TheLongDark.mp4
+
+# (No --hook-dur needed — automatically uses full range)
 ```
 
 ## Vibe
 
-Moody, dramatic, dark — not an action montage. Penumbra's glacial piano creates space for the dialogue to breathe. The scenes compilation was chosen for general scene variety rather than action-only highlights.
-
-## Notes
-
-- The hook clip was originally in projects/skyfall/ (misidentified). Now lives here.
-- Two music versions available: Penumbra (dark, recommended) and sb_snowfall (cinematic)
+Introspective, dark, intimate — no action. The Long Dark's ambient neoclassical piano with strings and atmospheric synth creates a cold, suspended feel for Bond's isolation. Crossfade transitions between character-driven scenes.

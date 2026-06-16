@@ -21,3 +21,6 @@ __pycache__/
 
 # macOS metadata
 .DS_Store
+
+# Whisper transcript cache
+transcripts/

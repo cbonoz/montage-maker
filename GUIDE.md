@@ -43,21 +43,38 @@ Example: At 80 BPM, a 4-beat measure = 3 seconds. Cut scenes to land at 0s, 3s, 
 
 ### Automatic Beat Alignment
 
-`build_montage.py` now **detects actual transient peaks** in the music (kick drums, snare hits, sharp chord changes) and snaps each scene boundary to the nearest detected downbeat. This means:
+`build_montage.py` **places scene cuts directly at detected transient peaks** in the music
+(kick drums, snare hits, sharp chord changes) rather than computing fixed intervals and
+snapping. This means:
 
 - Each scene cut lands on an **actual musical event**, not just an arithmetic position
-- **Variable scene durations** create natural rhythmic variation instead of robotic uniformity
-- Works best with percussive music (sb_snowfall, Penumbra)
-- Ambient music (Moonlight, Meanwhile) gracefully falls back to fixed durations
+- **Variable scene durations** (typically 1.5–3.0s) create natural rhythmic variation
+- Works best with percussive music (sb_snowfall, Penumbra, TheLongDark)
+- Ambient music gracefully falls back to fixed beat-snapped durations
 
 ```
-# Scene boundaries before (fixed, may drift from beats):
-[0.5s black] [6.4s hook] [1.60s] [1.60s] [1.60s] ...
+# Before (fixed intervals + snap):
+[0.5s black] [10.0s hook] [1.71s] [1.71s] [1.71s] ...
 
-# Scene boundaries after (snapped to actual music transients):
-[0.5s black] [6.4s hook] [1.58s] [1.63s] [1.58s] ...
-                              ^ each boundary snaps to nearest detected beat
+# After (transient-aligned walk):
+[0.5s black] [10.0s hook] [1.60s] [1.70s] [1.53s] ...
+                            ^ each cut lands on a real musical downbeat
 ```
+
+### Dynamic Post-Hook Buffer
+
+Instead of a fixed silence gap after the hook, `build_montage.py` analyzes the hook clip's
+audio to find the last moment where volume exceeds a silence threshold (2% of max energy).
+The buffer adjusts dynamically:
+
+```
+trailing_silence = hook_actual - last_audio_moment
+actual_buffer = max(0.3s, 2.0s - trailing_silence)
+```
+
+- Clips with natural trailing silence get less artificial pause
+- Clips that cut off abruptly get the full 2.0s buffer
+- The hook video's last frame lingers during the buffer for a natural pause
 
 ---
 
@@ -127,6 +144,25 @@ This means the song starts at the first meaningful moment — not awkward silenc
 - **Song intro**: automatically detected and skipped (starts at first musical onset)
 - **Scene audio**: Mute original scene audio entirely (use only music + hook dialogue)
 
+### Hook Duration & the `--hook-dur` Fix
+
+`--hook-dur` is no longer required for most use cases. The script now uses the full range
+of `--hook` by default. The old 3-second cap (`HOOK_DUR = 3.0`) only applies when no
+`--hook` range is given at all. If you want to truncate a hook shorter than its range,
+use `--hook-dur` explicitly.
+
+**What changed:**
+- `--hook-dur` default is now `None` (not `HOOK_DUR`)
+- The 30%-of-max-duration cap only applies when the range is auto-derived
+- Explicit `--hook-dur` values are used without any percentage cap
+
+### Transient Detection Threshold
+
+The beat detection threshold was changed from `median + 1.5 × IQR` to `max_energy × 0.5`.
+The IQR-based threshold often exceeded the maximum energy of dynamic orchestral tracks
+(sb_snowfall, Legazy, Penumbra), resulting in zero beats detected. The 50%-of-max threshold
+reliably finds 500–600 transients in the first 30s of any soundtrack.
+
 ### Crossfade Transitions
 
 Use `--transition crossfade` to enable smooth dissolves between scenes instead of hard cuts:
@@ -147,37 +183,10 @@ python build_montage.py movie.mp4 \
 - Best for: music with clear dynamic shifts where dissolves match the ebb and flow
 - Falls back to hard cuts automatically if ffmpeg's xfade filter fails
 
-### Color Grading
-
-Use `--color-grade` to apply a mood-altering color grade to the entire montage:
-
-```bash
-python build_montage.py movie.mp4 \
-    --hook 1:30-1:35 \
-    --scenes ... \
-    --song sounds/sb_snowfall.mp3 --bpm 80 \
-    --color-grade dark \
-    --output montage.mp4
-```
-
-**Built-in presets:**
-
-| Preset | Effect | Use Case |
-|--------|--------|----------|
-| `dark` | Slightly crushed blacks, boosted contrast, muted | Every day / moody |
-| `dramatic` | Darker shadows, higher contrast, desaturated | Intense / tragic scenes |
-| `cool` | Blue-tinted shadows, teal highlights | Blockbuster / sci-fi |
-| `warm` | Golden highlights, warm skin tones | Nostalgic / romantic |
-| `vintage` | Faded, low contrast, sepia-toned | Retro / period pieces |
-
-**Custom grades** — pass any ffmpeg filter string instead of a preset name:
-```bash
---color-grade "eq=brightness=-0.08:contrast=1.4:gamma=0.9"
---color-grade "hue=h=10:s=0.6"
---color-grade "colorchannelmixer=rr=0.8:gg=0.9:bb=0.7"
-```
-
-The grade is applied during the final mux step as a video filter. Since it requires re-encoding (cannot use stream copy), the file size may be slightly larger than an ungraded render.
+**Known pitfall (fixed):** The crossfade implementation previously had a bug where the
+hook clip was silently dropped from the output (only black + 1 scene rendered) and the
+offset calculation used absolute timeline positions instead of tracking accumulated
+chain duration. Both issues were fixed in the Deckard & Rachael montage build.
 
 ### When to Mute
 
@@ -205,6 +214,15 @@ Keep (subtle):
 - **Punchlines** — "No capes!" works only with visual comedy setup (⚠️ Light dialogue)
 - **Exposition** — "I'm the villain because..." is too heavy-handed
 - **Mumbled/noisy** — original audio has dialogue overlap or music underneath
+
+**Verify clips first.** Many short YouTube clips titled with a quote are fan-made text
+overlays, not actual movie footage. Before downloading:
+1. Check the video description for source details
+2. Use `--dump-json` to inspect resolution (1080p suggests real footage)
+3. Run `find_dialogue.py` on the clip — 0 segments or garbled audio (only "You" every 30s)
+   means it's a fake
+4. Prefer longer scene clips (60s+) over short quote clips when possible
+5. When in doubt, use a full scene file as both hook source and scenes source
 
 ### Scene Variety
 
@@ -261,30 +279,21 @@ python build_montage.py movie.mp4 --hook "$TIMING" ...
 - **Scene clips** — transcripts are not needed. Scene audio is muted entirely (replaced by music). Just pick timestamps that give visual variety — different locations, lighting, action levels
 - The beat alignment (`detect_beat_positions`) and crossfade transitions handle the rest
 
-### Automatic Timed Subtitles
+### When Whisper Can't Transcribe Dialogue
 
-`--hook-text` auto-times subtitles from cached transcripts when text contains `|`:
+Some clips have challenging audio (music underneath, low dialogue volume) that even the
+`small` Whisper model can't cleanly transcribe. Strategies for finding dialogue timestamps
+in difficult clips:
 
-```bash
-python build_montage.py movie.mp4 \
-    --hook-movie hook.mp4 \
-    --hook 64-70 \
-    --hook-text "I need you back.|I never left." \
-    --song sounds/sb_snowfall.mp3 --bpm 80 \
-    --output output.mp4
-```
-
-- Split multiple lines with `|`
-- Scans all cached transcripts in `transcripts/` for each line
-- Each subtitle times to appear exactly when spoken
-- Non-overlapping: each subtitle ends before the next starts
-- Falls back to full-duration subtitle if no transcript match found
-
-### Limitations
-- Only works for YouTube videos that have captions enabled
-- Auto-generated captions may mangle words (e.g., "vengeance" → "venyards")
-- Use broader search terms or adjacent text when exact phrases fail
-- Verify the returned segment by checking adjacent segments for context
+1. **Search for fan edits** — a short fan edit that explicitly titles itself with the
+   dialogue text (e.g. "do you love me, do you trust me | Blade Runner") is often easier
+   to work with than a raw scene clip
+2. **Extract sections** — use ffmpeg to extract 20-second audio chunks around the
+   expected dialogue, then run Whisper on just those sections for more reliable results
+3. **Search adjacent text** — if the exact line isn't found, search for the line before
+   or after it in the transcript
+4. **Use a larger model** — `--model medium` or `--model large` improves accuracy on
+   music-heavy clips (at the cost of speed)
 
 ---
 

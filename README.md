@@ -4,6 +4,8 @@ Build short video montages from movie clips. 0.5s black lead-in → hook (dialog
 
 Reproducible CLI — always caps total duration, supports multiple source movies, and snaps scene durations to the music's beat for rhythmic edits.
 
+> 📖 **Full technical reference → [`GUIDE.md`](GUIDE.md)** — beat alignment, audio envelopes, clip sourcing, crossfade transitions, common pitfalls
+
 ## Quick Start
 
 ```bash
@@ -46,8 +48,6 @@ The script automatically:
 | `--song` | — | Background music path (try `sounds/sb_snowfall.mp3`) |
 | `--bpm` | auto-detect | Beats per minute of the song (scene dur snaps to beat multiples) |
 | `--transition` | `cut` | Scene transition: `cut` or `crossfade` |
-| `--color-grade` | — | Color grade preset: `dark`, `dramatic`, `cool`, `warm`, `vintage`, or custom ffmpeg filter |
-| `--hook-text` | — | Dramatic subtitle overlay. Use `|` to separate timed lines (auto-times from cached transcripts) |
 | `--output` | `montage.mp4` | Output file path |
 | `--max-dur` | `25.0` | Target max duration in seconds |
 | `--scene-dur` | `2.0` | Per-scene duration in seconds (snapped to nearest beat) |
@@ -150,7 +150,7 @@ montage-maker/
     └── <next-project>/
 ```
 
-For **detailed technical guidance** on color grading, audio envelopes, subtitle auto-timing, beat alignment, and clip sourcing strategies, see [`GUIDE.md`](GUIDE.md).
+For **detailed technical guidance** on audio envelopes, beat alignment, crossfade transitions, and clip sourcing strategies, see [`GUIDE.md`](GUIDE.md).
 
 ## Requirements
 
@@ -172,10 +172,7 @@ For **detailed technical guidance** on color grading, audio envelopes, subtitle 
 - [x] Mixed-resolution source support (auto-pad to 1280x720)
 - [x] GitHub-connected
 - [x] Smooth crossfade transitions between scenes
-- [x] Auto-find scenes from movie by searching transcript/dialogue
 - [x] Song intro detection (skip quiet fade-ins)
-- [x] Dramatic subtitle overlay with transcript auto-timing
-- [x] Color grading presets (dark, dramatic, cool, warm, vintage)
 - [ ] Vertical 9:16 crop for TikTok
 - [ ] Hermes skill for one-command "make a montage with [clip]"
 - [ ] Energy progression (reorder scenes by intensity)

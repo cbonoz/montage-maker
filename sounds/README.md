@@ -21,6 +21,7 @@ Download required tracks manually. All are CC BY 4.0 by Scott Buckley (scottbuck
 | File | Track Name | Vibe |
 |------|-----------|------|
 | `Penumbra.mp3` | Penumbra | Dark, glacial, tender — strings + field recordings (70 BPM) |
+| `TheLongDark.mp3` | The Long Dark | Ambient neoclassical piano, strings, atmospheric synth — isolated, suspended |
 
 ## Epic / Horns (avoid for chill montages — too bold)
 
