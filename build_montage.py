@@ -30,8 +30,8 @@ DIALOGUE_LOUDNESS_TARGET = -10.0  # target dB for dialogue after boosting (loud 
 
 # Color grading presets for --color-grade
 COLOR_GRADES = {
-    "dark":     "eq=brightness=-0.06:contrast=1.3:saturation=0.7:gamma=0.9",
-    "dramatic": "eq=brightness=-0.10:contrast=1.5:saturation=0.5:gamma=0.85",
+    "dark":     "eq=brightness=-0.03:contrast=1.15:saturation=0.85:gamma=0.95",
+    "dramatic": "eq=brightness=-0.05:contrast=1.3:saturation=0.65:gamma=0.9",
     "cool":     "eq=saturation=0.8,colorchannelmixer=rr=0.85:rg=0.1:rb=0.05:gr=0.05:gg=0.9:gb=0.05:br=0.05:bg=0.1:bb=0.85",
     "warm":     "eq=saturation=1.2,colorchannelmixer=rr=1.1:rg=0.0:rb=0.0:gr=0.0:gg=1.0:gb=0.0:br=0.0:bg=0.1:bb=0.9",
     "vintage":  "eq=brightness=0.02:contrast=0.9:saturation=0.4,colorchannelmixer=rr=0.9:rg=0.1:rb=0.0:gr=0.1:gg=0.8:gb=0.1:br=0.05:bg=0.1:bb=0.85",

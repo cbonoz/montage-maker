@@ -147,6 +147,38 @@ python build_montage.py movie.mp4 \
 - Best for: music with clear dynamic shifts where dissolves match the ebb and flow
 - Falls back to hard cuts automatically if ffmpeg's xfade filter fails
 
+### Color Grading
+
+Use `--color-grade` to apply a mood-altering color grade to the entire montage:
+
+```bash
+python build_montage.py movie.mp4 \
+    --hook 1:30-1:35 \
+    --scenes ... \
+    --song sounds/sb_snowfall.mp3 --bpm 80 \
+    --color-grade dark \
+    --output montage.mp4
+```
+
+**Built-in presets:**
+
+| Preset | Effect | Use Case |
+|--------|--------|----------|
+| `dark` | Slightly crushed blacks, boosted contrast, muted | Every day / moody |
+| `dramatic` | Darker shadows, higher contrast, desaturated | Intense / tragic scenes |
+| `cool` | Blue-tinted shadows, teal highlights | Blockbuster / sci-fi |
+| `warm` | Golden highlights, warm skin tones | Nostalgic / romantic |
+| `vintage` | Faded, low contrast, sepia-toned | Retro / period pieces |
+
+**Custom grades** — pass any ffmpeg filter string instead of a preset name:
+```bash
+--color-grade "eq=brightness=-0.08:contrast=1.4:gamma=0.9"
+--color-grade "hue=h=10:s=0.6"
+--color-grade "colorchannelmixer=rr=0.8:gg=0.9:bb=0.7"
+```
+
+The grade is applied during the final mux step as a video filter. Since it requires re-encoding (cannot use stream copy), the file size may be slightly larger than an ungraded render.
+
 ### When to Mute
 
 Always mute:
@@ -231,22 +263,22 @@ python build_montage.py movie.mp4 --hook "$TIMING" ...
 
 ### Automatic Timed Subtitles
 
-When building a montage, `build_montage.py` can auto-time subtitles from the transcript:
+`--hook-text` auto-times subtitles from cached transcripts when text contains `|`:
 
 ```bash
 python build_montage.py movie.mp4 \
     --hook-movie hook.mp4 \
     --hook 64-70 \
     --hook-text "I need you back.|I never left." \
-    --hook-transcript-url "https://www.youtube.com/watch?v=WFwmDq-MKaE" \
     --song sounds/sb_snowfall.mp3 --bpm 80 \
     --output output.mp4
 ```
 
 - Split multiple lines with `|`
-- Each line is searched in the transcript and timed to appear exactly when spoken
-- Punctuation is stripped for matching (`.`, `,`, `!`, `?`)
-- Transcript is cached in `transcripts/` for reuse
+- Scans all cached transcripts in `transcripts/` for each line
+- Each subtitle times to appear exactly when spoken
+- Non-overlapping: each subtitle ends before the next starts
+- Falls back to full-duration subtitle if no transcript match found
 
 ### Limitations
 - Only works for YouTube videos that have captions enabled

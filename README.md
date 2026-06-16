@@ -46,11 +46,15 @@ The script automatically:
 | `--song` | — | Background music path (try `sounds/sb_snowfall.mp3`) |
 | `--bpm` | auto-detect | Beats per minute of the song (scene dur snaps to beat multiples) |
 | `--transition` | `cut` | Scene transition: `cut` or `crossfade` |
+| `--color-grade` | — | Color grade preset: `dark`, `dramatic`, `cool`, `warm`, `vintage`, or custom ffmpeg filter |
+| `--hook-text` | — | Dramatic subtitle overlay. Use `|` to separate timed lines (auto-times from cached transcripts) |
 | `--output` | `montage.mp4` | Output file path |
 | `--max-dur` | `25.0` | Target max duration in seconds |
 | `--scene-dur` | `2.0` | Per-scene duration in seconds (snapped to nearest beat) |
 | `--hook-dur` | `3.0` | Max hook duration in seconds |
 | `--keep` | — | Keep temp working files |
+
+See [`GUIDE.md`](GUIDE.md) for detailed usage of each flag, audio envelope behavior, and color grading presets.
 
 ## Examples
 
@@ -132,15 +136,21 @@ All tracks: `Scott Buckley — scottbuckley.com.au` (CC BY 4.0) — add credit i
 ```
 montage-maker/
 ├── build_montage.py       # reproducible CLI
+├── find_dialogue.py       # transcript-based dialogue search
+├── GUIDE.md               # technical reference for montage construction
 ├── sounds/                # shared ambient sound library
+├── MONTAGE_IDEAS.csv      # registry of all montage ideas
+├── transcripts/           # cached YouTube transcripts
 ├── README.md
 └── projects/
     ├── hp-montage/        # demo
     │   ├── source/        # raw clips
     │   ├── output/        # generated videos
-    │   └── notes.md
+    │   └── README.md
     └── <next-project>/
 ```
+
+For **detailed technical guidance** on color grading, audio envelopes, subtitle auto-timing, beat alignment, and clip sourcing strategies, see [`GUIDE.md`](GUIDE.md).
 
 ## Requirements
 
@@ -161,9 +171,12 @@ montage-maker/
 - [x] Multiple source movies (interleaved scenes)
 - [x] Mixed-resolution source support (auto-pad to 1280x720)
 - [x] GitHub-connected
+- [x] Smooth crossfade transitions between scenes
+- [x] Auto-find scenes from movie by searching transcript/dialogue
+- [x] Song intro detection (skip quiet fade-ins)
+- [x] Dramatic subtitle overlay with transcript auto-timing
+- [x] Color grading presets (dark, dramatic, cool, warm, vintage)
 - [ ] Vertical 9:16 crop for TikTok
 - [ ] Hermes skill for one-command "make a montage with [clip]"
-- [ ] Smooth crossfade transitions between scenes
-- [ ] Auto-find scenes from movie by searching transcript/dialogue
 - [ ] Energy progression (reorder scenes by intensity)
 - [ ] Download sound tracks as part of first build

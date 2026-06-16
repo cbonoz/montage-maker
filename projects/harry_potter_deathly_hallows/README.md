@@ -1,6 +1,6 @@
 # Harry Potter and the Deathly Hallows — Montages
 
-A collection of montages from the final installment of the Harry Potter series, exploring themes of memory, sacrifice, and love.
+Montages from the final Harry Potter installment, exploring memory, sacrifice, and love.
 
 ## Montages
 
@@ -8,38 +8,43 @@ A collection of montages from the final installment of the Harry Potter series, 
 
 **Status:** ✅ Built
 
-**Hook:**
-> "Always" — Snape's memories and the thematic echo of Dumbledore's trust
+**Hook (two-party):**
+> **Dumbledore:** "After all this time?"
+> **Snape:** "Always."
 
 **Music:** FirstSnow @ 75 BPM
 
 **Output:** `output/hp_always_montage.mp4`
 
 **Source clips used:**
-- `hook_always_*.mp4` — Snape's Patronus and memory sequences
-- `gringotts.mp4` — Gringotts vault scenes
-- `snape_memories.mp4` — Snape's past and Lily
+- `hook_always.webm` — "After all this time? Always." scene (YouTube, 82s)
+- `mc_snapes_death.mp4` — Snape's death scene
+- `hook_snape_memories.mp4` — Snape's memories of Lily
 
-**Scenes sampled:**
-- Snape's Patronus (doe)
-- Snape's memories of Lily
-- Dumbledore's guidance and trust in Snape
-- Gringotts sequences (atmosphere)
-- Snape's final moments and revelation
-- Memory sequences and transitions
-
-**Mood:** Snape's arc, love, sacrifice, emotional payoff, memory and loss
-
-**Build Command:**
-
-```bash
-# Rebuild hp_always montage
-python build_montage.py projects/harry_potter_deathly_hallows sounds/FirstSnow.mp3 --bpm 75
+**Hook timing (found via find_dialogue.py):**
+```
+"Always" → 78.7-82.7s in hook_always.webm
+Full exchange → 72-82s
 ```
 
-## Notes
+**Build:**
 
-- This montage focuses on Snape's character arc and the revelation of his lifelong dedication to protecting Harry
-- The "Always" theme connects to Dumbledore's emotional trust and Snape's private devotion
-- FirstSnow (75 BPM) provides gentle, emotional pacing appropriate for introspective memory sequences
-- The montage works best with subtle fades between memory and present-day scenes
+```bash
+# Find hook timestamps
+uv run find_dialogue.py "https://www.youtube.com/watch?v=LeG_judrcOA" "Always"
+
+# Build montage
+python build_montage.py \
+    projects/harry_potter_deathly_hallows/source/mc_snapes_death.mp4 \
+    projects/harry_potter_deathly_hallows/source/hook_snape_memories.mp4 \
+    --hook-movie projects/harry_potter_deathly_hallows/source/hook_always.webm \
+    --hook 72-82 --hook-dur 10 \
+    --bpm 75 \
+    --scenes \
+        10-13 20-23 40-43 60-63 90-93 120-123 \
+        140-143 30-33 50-53 80-83 110-113 150-153 \
+    --song sounds/FirstSnow.mp3 \
+    --hook-text "After all this time?|Always" \
+    --max-dur 30 --scene-dur 1.5 \
+    --output projects/harry_potter_deathly_hallows/output/hp_always_montage.mp4
+```
