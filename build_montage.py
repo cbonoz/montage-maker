@@ -25,6 +25,7 @@ TARGET_DUR = 25.0
 SCENE_DUR = 2.0
 HOOK_DUR = 3.0
 BLACK_DUR = 0.5
+POST_HOOK_BUFFER = 0.4  # dramatic pause between hook dialogue end and first scene cut
 MAX_SCENES = 20
 DIALOGUE_LOUDNESS_TARGET = -10.0  # target dB for dialogue after boosting (loud enough to hear over music)
 
@@ -431,7 +432,7 @@ def build(args):
     hook_actual = max(beat_sec, round(hook_actual / beat_sec) * beat_sec)
 
     # --- Step 2: budget scenes ---
-    remaining = avail - hook_actual
+    remaining = avail - hook_actual - POST_HOOK_BUFFER
     raw_scene_dur = args.scene_dur or SCENE_DUR
     beat_scene_dur = max(beat_sec, round(raw_scene_dur / beat_sec) * beat_sec)
     beat_scene_dur = max(beat_sec * 2, min(beat_sec * 8, beat_scene_dur))
@@ -440,7 +441,7 @@ def build(args):
     actual_scene_dur = max(beat_sec * 2, round((remaining / n_scenes) / beat_sec) * beat_sec)
     n_scenes = min(len(args.scenes), MAX_SCENES, max(1, int(remaining // actual_scene_dur)))
 
-    print(f"📐 {fmt(max_dur)}s total → {fmt(BLACK_DUR)}s black + {fmt(hook_actual)} hook + {n_scenes}x{fmt(actual_scene_dur)}s scenes")
+    print(f"📐 {fmt(max_dur)}s total → {fmt(BLACK_DUR)}s black + {fmt(hook_actual)} hook + {fmt(POST_HOOK_BUFFER)}s buffer + {n_scenes}x{fmt(actual_scene_dur)}s scenes")
     print(f"   (beat: {beat_sec:.2f}s, {int(actual_scene_dur/beat_sec)} beats per scene)")
 
     # --- Beat alignment: snap scene boundaries to actual music downbeats ---
@@ -452,7 +453,7 @@ def build(args):
 
     # Compute per-scene cut times, each snapped to nearest detectable beat
     scene_cut_times = []
-    current = BLACK_DUR + hook_actual
+    current = BLACK_DUR + hook_actual + POST_HOOK_BUFFER
     for i in range(n_scenes):
         target = current + actual_scene_dur
         nearest = target
@@ -499,7 +500,7 @@ def build(args):
         raw_dur = se - ss
         if scene_cut_times:
             if i == 0:
-                clip_dur = scene_cut_times[i] - (BLACK_DUR + hook_actual)
+                clip_dur = scene_cut_times[i] - (BLACK_DUR + hook_actual + POST_HOOK_BUFFER)
             else:
                 clip_dur = scene_cut_times[i] - scene_cut_times[i - 1]
             clip_dur = min(raw_dur, max(beat_sec * 1.5, clip_dur))
@@ -525,20 +526,31 @@ def build(args):
         "-t", str(BLACK_DUR),
         str(black_path)
     ], capture_output=True, check=True, timeout=30)
+    # Generate post-hook buffer (dramatic pause before first scene cut)
+    buffer_path = work / "buffer.mp4"
+    subprocess.run([
+        "ffmpeg", "-y",
+        "-f", "lavfi", "-i", f"color=c=black:s=1280x720:d={POST_HOOK_BUFFER}",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-pix_fmt", "yuv420p",
+        "-t", str(POST_HOOK_BUFFER),
+        str(buffer_path)
+    ], capture_output=True, check=True, timeout=30)
     # --- Step 5: concat video ---
-    all_clips = [black_path, hook_path] + scene_paths
+    all_clips = [black_path, hook_path, buffer_path] + scene_paths
     raw_vid = work / "raw_video.mp4"
 
     print(f"\n🔗 Concatenating {len(all_clips)} clips...")
-    if args.transition == "crossfade" and len(all_clips) > 2:
+    if args.transition == "crossfade" and len(all_clips) > 3:
         xfade_dur = min(beat_sec * 0.5, 0.4)  # half-beat crossfade, max 0.4s
-        scene_label = f"[1:v]"
+        # Hard cut black → hook → buffer, then crossfade between scenes
+        scene_label = f"[2:v]"  # buffer clip
         durs = [probe_dur(p) for p in all_clips]
         inputs = []
         for p in all_clips:
             inputs.extend(["-i", str(p)])
         parts = []
-        for i in range(2, len(all_clips)):
+        for i in range(3, len(all_clips)):
             offset = sum(durs[1:i]) - xfade_dur * (i - 1)
             next_label = f"x{i}"
             parts.append(
@@ -558,7 +570,7 @@ def build(args):
                 "-movflags", "+faststart",
                 str(raw_vid)
             ], capture_output=True, check=True, timeout=300)
-            print(f"   Crossfade: {xfade_dur:.1f}s transitions between {len(all_clips)-2} scenes")
+            print(f"   Crossfade: {xfade_dur:.1f}s transitions between {len(all_clips)-3} scenes")
         except subprocess.CalledProcessError:
             print(f"   Crossfade failed, falling back to hard cuts")
             # Fall through to hard cut below
@@ -621,8 +633,10 @@ def build(args):
             "ffmpeg", "-y", "-i", str(hook_path), "-vn",
             "-af",
             "pan=mono|c0=FL+FR,"
-            "highpass=f=150,lowpass=f=5000,"
-            "afftdn=nr=15:nf=-30",
+            "highpass=f=200,lowpass=f=4000,"
+            "afftdn=nr=25:nf=-40,"
+            "compand=attacks=0.1:decays=0.1:points=-80/-80|-15/-3|0/0,"
+            "dynaudnorm",
             "-c:a", "aac", str(hook_audio)
         ], capture_output=True, check=True)
 
